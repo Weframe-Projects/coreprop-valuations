@@ -7,6 +7,8 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import SectionCard from '@/components/report/SectionCard';
 import ComparablePanel from '@/components/report/ComparablePanel';
 import ValuationPanel from '@/components/report/ValuationPanel';
+import FloatingDictation from '@/components/ui/FloatingDictation';
+import DriveFolderPicker from '@/components/ui/DriveFolderPicker';
 import { REPORT_TYPE_LABELS, isAuctionType, type ReportType, type ReportRow, type Comparable } from '@/lib/types';
 
 // Section display order and names — matches client's actual report format (no numbered headings)
@@ -49,10 +51,18 @@ export default function ReportEditorPage() {
   const [generating, setGenerating] = useState(false);
   const [pdfStatus, setPdfStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [pdfError, setPdfError] = useState('');
+  const [docxStatus, setDocxStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [docxError, setDocxError] = useState('');
+  const [applyingNotes, setApplyingNotes] = useState(false);
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveFolderId, setDriveFolderId] = useState<string | null>(null);
+  const [driveFolderName, setDriveFolderName] = useState<string | null>(null);
+  const [showDrivePicker, setShowDrivePicker] = useState(false);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pdfBlobUrl = useRef<string | null>(null);
+  const docxBlobUrl = useRef<string | null>(null);
 
   // Load report
   const loadReport = useCallback(async () => {
@@ -78,6 +88,17 @@ export default function ReportEditorPage() {
   useEffect(() => {
     loadReport();
   }, [loadReport]);
+
+  // Warn user about unsaved changes when navigating away
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (saving) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [saving]);
 
   // Poll for generation results when report has no generated sections yet
   useEffect(() => {
@@ -113,8 +134,50 @@ export default function ReportEditorPage() {
   useEffect(() => {
     return () => {
       if (pdfBlobUrl.current) URL.revokeObjectURL(pdfBlobUrl.current);
+      if (docxBlobUrl.current) URL.revokeObjectURL(docxBlobUrl.current);
     };
   }, []);
+
+  // Check Drive connection status
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((r) => r.ok ? r.json() : null)
+      .then((settings) => {
+        if (settings?.google_tokens) {
+          setDriveConnected(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Load Drive folder ID + name from report (checks both dedicated column and property_details fallback)
+  useEffect(() => {
+    if (report) {
+      const raw = report as unknown as Record<string, unknown>;
+      const pd = (report.property_details as Record<string, unknown> | null) || {};
+      const folderId = (raw.google_drive_folder_id || pd.driveFolderId) as string | undefined;
+      const folderName = pd.driveFolderName as string | undefined;
+      if (folderId) setDriveFolderId(folderId);
+      if (folderName) setDriveFolderName(folderName);
+    }
+  }, [report]);
+
+  // Link Drive folder handler (called from DriveFolderPicker)
+  async function handleLinkDriveFolder(folder: { id: string; name: string }) {
+    setShowDrivePicker(false);
+    setDriveFolderId(folder.id);
+    setDriveFolderName(folder.name);
+    // Persist to report — saves in both property_details (migration-safe) and the dedicated column
+    const existingPd = (report?.property_details as Record<string, unknown> | null) || {};
+    fetch(`/api/reports/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        google_drive_folder_id: folder.id,
+        property_details: { ...existingPd, driveFolderId: folder.id, driveFolderName: folder.name },
+      }),
+    }).catch(() => {});
+  }
 
   // Auto-save with debounce
   const saveReport = useCallback(async (updates: Record<string, unknown>) => {
@@ -221,6 +284,64 @@ export default function ReportEditorPage() {
     }
   };
 
+  // Generate Word Document
+  const handleGenerateDocx = async () => {
+    if (!report) return;
+    setDocxStatus('loading');
+    setDocxError('');
+
+    try {
+      const res = await fetch(`/api/reports/${id}/docx`, { method: 'POST' });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      if (docxBlobUrl.current) URL.revokeObjectURL(docxBlobUrl.current);
+      const url = URL.createObjectURL(blob);
+      docxBlobUrl.current = url;
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `CoreProp-${report.postcode.replace(/\s/g, '')}-${report.reference_number || id.slice(0, 8)}.docx`;
+      a.click();
+
+      setDocxStatus('success');
+    } catch (err) {
+      setDocxError(err instanceof Error ? err.message : 'Failed to generate Word document');
+      setDocxStatus('error');
+    }
+  };
+
+  // Inspection notes — stored inside property_details.inspectionNotes (no DB migration needed)
+  const inspectionNotes = (report?.property_details as Record<string, unknown>)?.inspectionNotes as string || '';
+
+  const handleInspectionNotesChange = useCallback((notes: string) => {
+    if (!report) return;
+    const currentDetails = (report.property_details || {}) as Record<string, unknown>;
+    updateReport({ property_details: { ...currentDetails, inspectionNotes: notes } });
+  }, [report, updateReport]);
+
+  // Apply inspection notes to report via AI
+  const handleApplyNotes = useCallback(async () => {
+    if (!report || applyingNotes) return;
+    setApplyingNotes(true);
+    try {
+      const res = await fetch(`/api/reports/${id}/apply-notes`, { method: 'POST' });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+      // Reload report to get updated sections
+      await loadReport();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to apply notes');
+    } finally {
+      setApplyingNotes(false);
+    }
+  }, [report, applyingNotes, id, loadReport]);
+
   // Mark as final
   const handleMarkFinal = () => {
     updateReport({ status: 'final' });
@@ -295,10 +416,10 @@ export default function ReportEditorPage() {
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{report.property_address}</h1>
-              <div className="flex items-center gap-3 mt-2">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 break-words">{report.property_address}</h1>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2">
                 <span className="text-sm text-gray-500">{report.postcode}</span>
                 <span className="text-xs text-gray-400">|</span>
                 <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{reportLabel}</span>
@@ -311,7 +432,7 @@ export default function ReportEditorPage() {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               {saving && (
                 <span className="text-xs text-gray-400 flex items-center gap-1">
                   <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
@@ -351,6 +472,64 @@ export default function ReportEditorPage() {
                   </>
                 )}
               </button>
+              <button
+                onClick={handleGenerateDocx}
+                disabled={docxStatus === 'loading' || !hasSections}
+                className="px-5 py-2 bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-sm font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {docxStatus === 'loading' ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Generate Word
+                  </>
+                )}
+              </button>
+
+              {/* Google Drive folder link */}
+              {driveConnected && (
+                driveFolderId ? (
+                  <div className="flex items-center gap-1">
+                    <a
+                      href={`https://drive.google.com/drive/folders/${driveFolderId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 text-sm font-medium border border-green-600 text-green-700 rounded-lg hover:bg-green-50 transition flex items-center gap-1.5"
+                      title={driveFolderName ? `Linked: ${driveFolderName}` : 'Open linked Drive folder'}
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M7.71 3.5L1.15 15l4.58 7.5h13.54l4.58-7.5L17.29 3.5H7.71zm-.56 1h9.7l5.83 10.5h-9.7L7.15 4.5zm-.29.5l5.83 10.5H2.99L8.86 5zm6.41 11.5h9.7l-4 6.5H6.97l4-6.5z" /></svg>
+                      {driveFolderName ? driveFolderName.slice(0, 20) + (driveFolderName.length > 20 ? '…' : '') : 'Drive ✓'}
+                    </a>
+                    <button
+                      onClick={() => setShowDrivePicker(true)}
+                      className="p-2 text-gray-400 hover:text-gray-600 transition"
+                      title="Change folder"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowDrivePicker(true)}
+                    className="px-4 py-2 text-sm font-medium border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition flex items-center gap-1.5"
+                    title="Link a Google Drive folder to this report"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M7.71 3.5L1.15 15l4.58 7.5h13.54l4.58-7.5L17.29 3.5H7.71zm-.56 1h9.7l5.83 10.5h-9.7L7.15 4.5zm-.29.5l5.83 10.5H2.99L8.86 5zm6.41 11.5h9.7l-4 6.5H6.97l4-6.5z" /></svg>
+                    Link Drive
+                  </button>
+                )
+              )}
             </div>
           </div>
 
@@ -381,6 +560,32 @@ export default function ReportEditorPage() {
               PDF generation failed: {pdfError}
             </div>
           )}
+          {docxStatus === 'success' && (
+            <div className="mt-4 flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-5 py-3">
+              <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="text-sm font-medium text-blue-800">Word document downloaded successfully</span>
+              <button
+                onClick={() => {
+                  if (docxBlobUrl.current) {
+                    const a = document.createElement('a');
+                    a.href = docxBlobUrl.current;
+                    a.download = `CoreProp-${report.postcode.replace(/\s/g, '')}.docx`;
+                    a.click();
+                  }
+                }}
+                className="ml-auto text-sm font-medium text-blue-700 hover:text-blue-800 underline"
+              >
+                Download Again
+              </button>
+            </div>
+          )}
+          {docxStatus === 'error' && docxError && (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700">
+              Word generation failed: {docxError}
+            </div>
+          )}
         </div>
 
         {/* Generation progress indicator */}
@@ -393,7 +598,7 @@ export default function ReportEditorPage() {
               </svg>
               <h3 className="font-semibold text-gray-900">Generating Report...</h3>
             </div>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { label: 'EPC Data', done: !!report.epc_data },
                 { label: 'Google Maps', done: !!report.google_maps_data },
@@ -431,13 +636,13 @@ export default function ReportEditorPage() {
         {/* Tab bar */}
         {hasSections && (
           <>
-            <div className="flex border-b border-gray-200 mb-6">
+            <div className="flex overflow-x-auto border-b border-gray-200 mb-6">
               {tabs.map((tab) => (
                 <button
                   key={tab.key}
                   type="button"
                   onClick={() => setActiveTab(tab.key)}
-                  className={`px-5 py-2.5 text-sm font-medium transition-colors ${
+                  className={`px-3 sm:px-5 py-2.5 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
                     activeTab === tab.key
                       ? 'border-b-2 border-[#c49a6c] text-[#c49a6c]'
                       : 'text-gray-500 hover:text-gray-700'
@@ -520,13 +725,13 @@ export default function ReportEditorPage() {
               onChange={handleValuationChange}
             />
 
-            {/* PDF Generation button at bottom */}
-            <div className="mt-8 mb-4">
+            {/* Document generation buttons at bottom */}
+            <div className="mt-8 mb-4 flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
                 onClick={handleGeneratePdf}
                 disabled={pdfStatus === 'loading' || !report.valuation_figure}
-                className="w-full rounded-xl bg-[#c49a6c] px-6 py-4 text-lg font-semibold text-white shadow-lg transition-all hover:bg-[#b08a5c] hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex-1 rounded-xl bg-[#c49a6c] px-6 py-4 text-lg font-semibold text-white shadow-lg transition-all hover:bg-[#b08a5c] hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {pdfStatus === 'loading' ? (
                   <span className="flex items-center justify-center gap-3">
@@ -537,17 +742,55 @@ export default function ReportEditorPage() {
                     Generating PDF...
                   </span>
                 ) : !report.valuation_figure ? (
-                  'Enter a valuation figure to generate PDF'
+                  'Enter valuation to generate'
                 ) : pdfStatus === 'success' ? (
                   'Generate PDF Again'
                 ) : (
                   'Generate PDF'
                 )}
               </button>
+              <button
+                type="button"
+                onClick={handleGenerateDocx}
+                disabled={docxStatus === 'loading' || !report.valuation_figure}
+                className="flex-1 rounded-xl bg-[#2563eb] px-6 py-4 text-lg font-semibold text-white shadow-lg transition-all hover:bg-[#1d4ed8] hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {docxStatus === 'loading' ? (
+                  <span className="flex items-center justify-center gap-3">
+                    <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Generating Word...
+                  </span>
+                ) : !report.valuation_figure ? (
+                  'Enter valuation to generate'
+                ) : docxStatus === 'success' ? (
+                  'Generate Word Again'
+                ) : (
+                  'Generate Word'
+                )}
+              </button>
             </div>
           </>
         )}
       </div>
+
+      {/* Floating inspection notes / dictation button */}
+      <FloatingDictation
+        notes={inspectionNotes}
+        onChange={handleInspectionNotesChange}
+        onApplyNotes={handleApplyNotes}
+        applyingNotes={applyingNotes}
+      />
+
+      {/* Drive folder picker modal */}
+      {showDrivePicker && (
+        <DriveFolderPicker
+          onSelect={handleLinkDriveFolder}
+          onClose={() => setShowDrivePicker(false)}
+        />
+      )}
     </AppShell>
   );
 }
@@ -578,7 +821,7 @@ function PropertyDataView({
       {epc && (
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">EPC Data</h3>
-          <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-4 sm:gap-x-8 gap-y-3 sm:grid-cols-2">
             {[
               { label: 'Property Type', value: epc.builtForm || epc.propertyType },
               { label: 'Floor Area', value: epc.floorArea ? `${epc.floorArea} m\u00B2` : '' },
@@ -610,7 +853,7 @@ function PropertyDataView({
       {maps && (
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Location</h3>
-          <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 mb-4">
+          <div className="grid grid-cols-1 gap-x-4 sm:gap-x-8 gap-y-3 sm:grid-cols-2 mb-4">
             <div className="flex items-baseline gap-2">
               <span className="text-xs font-medium text-gray-500">Local Authority:</span>
               <span className="text-sm text-gray-900">{report.local_authority || maps.localAuthority || 'N/A'}</span>
@@ -622,14 +865,31 @@ function PropertyDataView({
           </div>
           {maps.nearbyPlaces && maps.nearbyPlaces.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-gray-500 mb-2">Nearby Transport</h4>
-              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                {maps.nearbyPlaces.map((place, i) => (
-                  <div key={i} className="text-sm text-gray-700">
-                    <span className="font-medium">{place.name}</span>{' '}
-                    <span className="text-xs text-gray-400">{place.distanceText}</span>
-                  </div>
-                ))}
+              <h4 className="text-xs font-medium text-gray-500 mb-3">Nearby Amenities</h4>
+              <div className="space-y-3">
+                {[
+                  { label: 'Transport', types: ['train_station'] },
+                  { label: 'Education', types: ['primary_school', 'secondary_school', 'school'] },
+                  { label: 'Medical', types: ['hospital', 'doctor'] },
+                  { label: 'Shopping', types: ['supermarket'] },
+                  { label: 'Recreation', types: ['park'] },
+                ].map((cat) => {
+                  const places = maps.nearbyPlaces.filter((p) => cat.types.includes(p.type));
+                  if (places.length === 0) return null;
+                  return (
+                    <div key={cat.label}>
+                      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{cat.label}</span>
+                      <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 mt-1">
+                        {places.map((place, i) => (
+                          <div key={i} className="text-sm text-gray-700">
+                            <span className="font-medium">{place.name}</span>{' '}
+                            <span className="text-xs text-gray-400">{place.distanceText}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -661,7 +921,7 @@ function PropertyDataView({
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Property Details (Editable)</h3>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-500">Area Character</label>
               <textarea
@@ -715,7 +975,7 @@ function PropertyDataView({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-500">Front / Parking</label>
               <textarea
@@ -738,7 +998,7 @@ function PropertyDataView({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-500">Garage</label>
               <select

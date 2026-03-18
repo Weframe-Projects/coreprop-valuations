@@ -121,6 +121,29 @@ export async function getLocationMapUrl(
 }
 
 // ------------------------------------------------------------
+// Direct Google Maps Static API URLs (for PDF embedding where proxy may not work)
+// These use the API key directly — only use server-side (not exposed to browser)
+// ------------------------------------------------------------
+
+export function getDirectStreetViewUrl(address: string, size: string = '800x600'): string {
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  if (!key) return '';
+  return `https://maps.googleapis.com/maps/api/streetview?size=${size}&location=${encodeURIComponent(address)}&key=${key}`;
+}
+
+export function getDirectSatelliteUrl(lat: number, lng: number, zoom: number = 19, size: string = '800x600'): string {
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  if (!key) return '';
+  return `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=${size}&maptype=satellite&key=${key}`;
+}
+
+export function getDirectLocationMapUrl(lat: number, lng: number, zoom: number = 16, size: string = '800x600'): string {
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  if (!key) return '';
+  return `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=${size}&maptype=roadmap&markers=color:red|${lat},${lng}&key=${key}`;
+}
+
+// ------------------------------------------------------------
 // Internal: search for nearby places of a given type
 // ------------------------------------------------------------
 

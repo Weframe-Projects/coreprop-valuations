@@ -13,6 +13,7 @@ import {
   Comparable,
   ClientDetails,
   NearbyPlace,
+  StructuredInspectionNotes,
   isInspectedType,
   isDesktopType,
   PROPERTY_TYPE_LABELS,
@@ -24,8 +25,8 @@ import {
 
 // --- Constants ---
 
-const MODEL = 'claude-sonnet-4-5-20250929';
-const MAX_TOKENS = 4000;
+const MODEL = 'claude-sonnet-4-6';
+const MAX_TOKENS = 6000;
 
 const GARAGE_LABELS: Record<string, string> = {
   none: '',
@@ -59,6 +60,13 @@ Your writing style must adhere to the following rules:
 9. Use paragraph breaks between distinct topics within a section
 10. Never make definitive claims about structural integrity or hidden defects
 11. Format output as valid JSON with the exact keys specified in the request
+12. CRITICAL: Every paragraph MUST start with its sub-number (e.g. "5.1.", "5.2.", "13.1.", "13.2."). This is mandatory RICS Red Book formatting. Never write a paragraph without its sub-number prefix.
+13. Reference the last known sale price and date if available from comparable/Land Registry data
+14. When inspection notes mention specific fittings, brands, or details (e.g. "Vaillant combi boiler", "chrome mixer taps", "laminate worktops"), name them explicitly in the report. Never generalise specific observations into vague descriptions.
+15. For condition sections, always state the specific room, the specific fitting/element, and its condition. Example: "The kitchen is fitted with wall and base units with laminate worktops and a stainless-steel sink. The units appear dated but functional." NOT: "The kitchen is in fair condition."
+16. Use the phrase "at the time of inspection" when describing observed conditions in inspected reports.
+17. For Section 5 (Description), always mention the number of storeys, the approximate construction era, and the neighbourhood character.
+18. For Section 13 (Condition), structure exactly as: opening statement, then each element (kitchen, bathroom, heating, flooring, electrical, windows, decorative, overall). Each gets its own sub-numbered paragraph.
 
 You will be given structured property data and asked to generate specific report sections. Return ONLY a JSON object with the requested section keys and their text content. Do not include any markdown formatting or code fences — return raw JSON only.`;
 
@@ -113,15 +121,31 @@ function generateSection9Services(details: PropertyDetails): string {
 
 function generateSection10FloorArea(
   details: PropertyDetails,
-  reportType: ReportType
+  reportType: ReportType,
+  measuredArea?: number
 ): string {
-  const area = details.floorArea;
+  const epcArea = details.floorArea;
+  const lines: string[] = [];
+
+  lines.push('10.1. All areas are approximate only and unless mentioned otherwise have been measured based on a Gross Internal Area basis as defined by RICS Property Measurement 2nd Edition January 2018 incorporating IPMS.');
 
   if (isInspectedType(reportType)) {
-    return `All areas are approximate only and unless mentioned otherwise have been measured based on a Gross Internal Area basis as defined by RICS Property Measurement 2nd Edition January 2018 incorporating IPMS.\n\nWe estimate the total useful superficial floor area of the Property to be some ${area}m\u00B2.`;
+    if (measuredArea && measuredArea > 0) {
+      lines.push(`10.2. We estimate the total useful superficial floor area of the Property to be some ${measuredArea}m\u00B2.`);
+      // If EPC area is available and differs, note it
+      if (epcArea && Math.abs(epcArea - measuredArea) > 3) {
+        lines.push(`The EPC records a floor area of ${epcArea}m\u00B2.`);
+      }
+    } else if (epcArea) {
+      lines.push(`10.2. We estimate the total useful superficial floor area of the Property to be some ${epcArea}m\u00B2.`);
+    }
+  } else {
+    if (epcArea) {
+      lines.push(`10.2. We estimate the gross internal floor area to be assumed c.${epcArea}m\u00B2.`);
+    }
   }
 
-  return `We estimate the gross internal floor area to be assumed c.${area}m\u00B2.`;
+  return lines.join('\n\n');
 }
 
 function generateSection11Tenure(details: PropertyDetails): string {
@@ -209,8 +233,10 @@ function buildUserPrompt(data: {
   epcData: EPCData | null;
   googleMapsData: GoogleMapsData | null;
   comparables: Comparable[];
+  structuredNotes: StructuredInspectionNotes | null;
+  photoAnalysis: { label: string; analysis: string }[];
 }): string {
-  const { reportType, propertyDetails, inspectionData, epcData, googleMapsData } = data;
+  const { reportType, propertyDetails, inspectionData, epcData, googleMapsData, structuredNotes, photoAnalysis } = data;
   const inspected = isInspectedType(reportType);
   const propertyTypeLabel = PROPERTY_TYPE_LABELS[propertyDetails.propertyType] || propertyDetails.propertyType;
 
@@ -267,6 +293,83 @@ Roof Condition: ${inspectionData.roofCondition}${inspectionData.roofNotes ? ' �
 `;
   }
 
+  if (structuredNotes) {
+    // Build note fields — combine layout + sizing together so AI can correlate rooms with measurements
+    const noteFields: { key: keyof StructuredInspectionNotes; label: string }[] = [
+      { key: 'descriptionNotes', label: 'Property Description & Area Character' },
+      { key: 'constructionNotes', label: 'Construction (brickwork, roof, stories)' },
+      { key: 'amenitiesNotes', label: 'Amenities, Access & Front Approach' },
+      { key: 'heatingNotes', label: 'Heating System' },
+      { key: 'windowsNotes', label: 'Windows' },
+      { key: 'gardenNotes', label: 'Garden & External Areas' },
+      { key: 'conditionNotes', label: 'Condition Issues' },
+      { key: 'extraNotes', label: 'Additional Notes' },
+    ];
+
+    const filledNotes = noteFields
+      .filter(({ key }) => structuredNotes[key])
+      .map(({ key, label }) => `${label}: ${structuredNotes[key]}`);
+
+    // Combine layout + sizing into one section so room names and measurements are together
+    const hasLayout = !!structuredNotes.layoutNotes;
+    const hasSizing = !!structuredNotes.sizingNotes;
+    if (hasLayout || hasSizing) {
+      let roomSection = 'Room Layout, Floor Finishes & Measurements:\n';
+      if (hasLayout) roomSection += structuredNotes.layoutNotes;
+      if (hasLayout && hasSizing) roomSection += '\n\nRoom dimensions (metres, in same order as rooms above):\n';
+      if (hasSizing) roomSection += structuredNotes.sizingNotes;
+      filledNotes.splice(3, 0, roomSection); // Insert after amenities
+    }
+
+    if (filledNotes.length > 0) {
+      prompt += `
+--- STRUCTURED INSPECTION NOTES ---
+Inspector: ${structuredNotes.inspectorInitials || 'N/A'}
+Date: ${structuredNotes.inspectionDate || 'N/A'}
+Time: ${structuredNotes.timeOfDay || 'N/A'}
+Weather: ${structuredNotes.weatherConditions || 'N/A'}
+
+${filledNotes.join('\n\n')}
+
+IMPORTANT - Surveyor shorthand guide:
+- "s/g" = single glazed, "d/g" = double glazed
+- "uPVC" / "UPVC" = uPVC windows
+- "FFF" = first floor flat
+- "Combi" = combination boiler
+- "resi" = residential, "sort" = sought
+- Floor finishes after room names: "carpet", "tiled", "laminate", "wood" = the flooring in that room
+- Measurements like "6.21 x 2.94" = room dimensions in metres (length x width)
+- Room names in layout and measurements in sizing are listed in the SAME ORDER — match them up
+- "period conversion" = a period building converted into separate flats/units
+- "historic water ingress" = past water damage (not necessarily active)
+
+SECTION ROUTING GUIDE — map these notes to sections:
+- descriptionNotes → section_5_description (property type, area character, neighbourhood)
+- constructionNotes → section_6_construction (brickwork, roof, storeys, build method)
+- amenitiesNotes → section_8_externally (front approach, access) AND section_15_amenity (local amenities)
+- layoutNotes + sizingNotes → section_7_accommodation (room names matched with measurements)
+- heatingNotes → section_13_condition (heating paragraph 13.4)
+- windowsNotes → section_13_condition (windows paragraph 13.7)
+- gardenNotes → section_8_externally (rear garden paragraph)
+- conditionNotes → section_13_condition (relevant sub-paragraphs: kitchen, bathroom, flooring, electrical, decorative, general)
+- extraNotes → distribute to the most relevant section
+
+CRITICAL: These are first-hand notes from the surveyor's site visit. Do NOT lose any specific observations — every room, measurement, condition issue, fittings detail, and construction detail MUST appear in the final report. Name specific brands, materials, and fittings exactly as noted.
+`;
+    }
+  }
+
+  if (photoAnalysis.length > 0) {
+    prompt += `
+--- PHOTO ANALYSIS ---
+The following observations were extracted from photographs taken during the inspection:
+
+${photoAnalysis.map((p, i) => `Photo ${i + 1} (${p.label}): ${p.analysis}`).join('\n')}
+
+Use these visual observations to supplement condition assessments and descriptions where relevant.
+`;
+  }
+
   if (googleMapsData) {
     prompt += `
 --- LOCATION DATA ---
@@ -284,9 +387,15 @@ ${googleMapsData.nearbyPlaces.map((p: NearbyPlace) => `  - ${p.name} (${p.type})
 
 Return a JSON object with these exact keys:
 
-"section_5_description": Description of Property — 1-2 sentences describing the property type and its setting within the area. Reference propertyType, areaCharacter, and locationNotes.
+"section_5_description": Description of Property — Write 2-3 sub-numbered paragraphs:
+  5.1. The Property type, position within the building/street (e.g. "self-contained ground floor flat", "middle terrace period conversion"), and its location (populated residential area, sought-after neighbourhood, etc.). Reference propertyType, areaCharacter, and locationNotes.
+  5.2. The last known sale price and date if available (e.g. "The Property last stated sold for £265,000 on 16 September 2016."). If no sale data is available, omit this paragraph.
+  Keep it concise and factual — no speculation about value. Match this exact style: "The Property is a self-contained ground floor flat positioned within a purpose-built Local Authority block, located in a populated south-east London suburb, close to local amenities."
 
-"section_6_construction": Construction — Describe the construction method, materials, and roof. Reference storeys, brickType, roofType, subFlooring, constructionEra. Use separate paragraphs for main construction, sub-flooring, and a closing statement about construction method.
+"section_6_construction": Construction — Write 3 sub-numbered paragraphs:
+  6.1. Main construction — storeys, external wall material, roof type and material, any notable features (chimney stacks, render, detailing). Reference storeys, brickType, roofType, constructionEra.
+  6.2. Sub-flooring — type of sub-floor construction (solid, suspended timber, etc.).
+  6.3. Closing statement: "The method of construction is traditional for the type and age of the Property."
 ${needsAIAccommodation ? `
 "section_7_accommodation": Accommodation — Based on the property type (${propertyTypeLabel}), EPC habitable rooms (${epcData?.numberOfRooms ?? 'unknown'}), floor area (${propertyDetails.floorArea}m²), built form (${epcData?.builtForm ?? 'unknown'}), and storeys (${propertyDetails.storeys}), generate a plausible room layout. Format as:
 Ground Floor: [comma-separated room list].
@@ -296,7 +405,18 @@ Use assumed language for desktop valuations. Keep room counts consistent with th
 "section_8_externally": Externally — Describe the front, parking, garage (if any), and rear garden. Use separate paragraphs for each area. Reference frontDescription, parkingDescription, garageType, rearGardenDescription.
 
 "section_13_condition": Condition & Further Details — ${inspected
-    ? 'Based on the inspection data, describe the internal condition: kitchen, bathroom, heating, flooring, electrical, windows, and decorative order. Use separate paragraphs. Be specific about fittings and condition ratings.'
+    ? `Generate sub-numbered paragraphs covering each area of internal condition. Use this exact structure:
+  13.1 Opening: "In preparing the Valuation Report, we have had regard for the following matters as at the date of inspection:"
+  13.2 Kitchen — condition of fittings, units, worktops. Look for "Kitchen:" in condition notes.
+  13.3 Bathroom — suite type, tiles, shower, overall condition. Look for "Bathroom:" in condition notes.
+  13.4 Heating — boiler type and make, radiators, visual condition (not tested, assumed functional).
+  13.5 Flooring — type and condition throughout (carpet, laminate, tiles, exposed boards). Look for "Flooring:" in condition notes.
+  13.6 Electrical — wiring installation, consumer unit, NICEIC compliance (not tested). Look for "Electrical:" in condition notes.
+  13.7 Windows — frame type, glazing, sash/casement, condition.
+  13.8 Decorative — overall decorative order (freshly decorated, dated, in need of redecoration). Look for "Decorative:" in condition notes.
+  13.9 General issues — dampness, water ingress, cracking, structural concerns, specialist investigation needed. Look for "General:" in condition notes.
+  13.10 Overall conclusion — overall condition assessment and modernisation expectation (e.g. "The general condition of the Property is considered dated and in need of modernisation.").
+  Be specific about fittings, condition ratings and observations from the surveyor notes.`
     : 'This is a DESKTOP valuation — no inspection was carried out. Use assumed language throughout. State that internal condition is assumed based on age and type. Reference EPC data where available.'}
 
 "section_14_structure": Structure and External — ${inspected
@@ -496,6 +616,35 @@ function fallbackSection15(
   return lines.join('\n\n');
 }
 
+// --- Sub-numbering Enforcement ---
+
+/**
+ * Ensures all paragraphs in a section start with proper sub-numbers (e.g. 5.1., 5.2.).
+ * If the AI returns un-numbered paragraphs, this adds them.
+ */
+function enforceSubNumbering(sectionKey: string, text: string): string {
+  // Extract section number from key (e.g. "section_5_description" → 5)
+  const match = sectionKey.match(/section_(\d+)/);
+  if (!match) return text;
+  const sectionNum = parseInt(match[1], 10);
+
+  // Split into paragraphs (double newline separated)
+  const paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  if (paragraphs.length === 0) return text;
+
+  // Check if first paragraph already has sub-numbering
+  const subNumPattern = new RegExp(`^${sectionNum}\\.\\d+\\.?\\s`);
+  const alreadyNumbered = paragraphs.some(p => subNumPattern.test(p));
+  if (alreadyNumbered) return text;
+
+  // Add sub-numbers
+  return paragraphs.map((p, i) => {
+    // Don't number if it's already numbered with any pattern like "X.Y."
+    if (/^\d+\.\d+\.?\s/.test(p)) return p;
+    return `${sectionNum}.${i + 1}. ${p}`;
+  }).join('\n\n');
+}
+
 // --- Main Generator ---
 
 export async function generateReportSections(data: {
@@ -506,6 +655,9 @@ export async function generateReportSections(data: {
   googleMapsData: GoogleMapsData | null;
   comparables: Comparable[];
   clientDetails: ClientDetails;
+  structuredNotes?: StructuredInspectionNotes | null;
+  photoAnalysis?: { label: string; analysis: string }[];
+  measuredFloorArea?: number;
 }): Promise<Record<string, string>> {
   const {
     reportType,
@@ -514,6 +666,9 @@ export async function generateReportSections(data: {
     epcData,
     googleMapsData,
     comparables,
+    structuredNotes = null,
+    photoAnalysis = [],
+    measuredFloorArea,
   } = data;
 
   // Determine if AI should generate accommodation (when rooms not manually provided)
@@ -522,7 +677,7 @@ export async function generateReportSections(data: {
   // Build template sections (no AI needed)
   const templateSections: Record<string, string> = {
     section_9_services: generateSection9Services(propertyDetails),
-    section_10_floor_area: generateSection10FloorArea(propertyDetails, reportType),
+    section_10_floor_area: generateSection10FloorArea(propertyDetails, reportType, measuredFloorArea),
     section_11_tenure: generateSection11Tenure(propertyDetails),
     section_12_roads: generateSection12Roads(propertyDetails),
   };
@@ -559,6 +714,8 @@ export async function generateReportSections(data: {
       epcData,
       googleMapsData,
       comparables,
+      structuredNotes,
+      photoAnalysis,
     });
 
     const response = await client.messages.create({
@@ -588,6 +745,13 @@ export async function generateReportSections(data: {
     // aiSections remains empty — fallbacks will be used
   }
 
+  // Enforce sub-numbering on AI sections
+  for (const key of Object.keys(aiSections)) {
+    if (aiSections[key] && typeof aiSections[key] === 'string') {
+      aiSections[key] = enforceSubNumbering(key, aiSections[key]);
+    }
+  }
+
   // Merge: AI sections take precedence over fallbacks, templates are always used
   const AI_SECTION_KEYS = [
     'section_5_description',
@@ -602,9 +766,11 @@ export async function generateReportSections(data: {
   const result: Record<string, string> = { ...templateSections };
 
   for (const key of AI_SECTION_KEYS) {
-    result[key] = (aiSections[key] && typeof aiSections[key] === 'string')
-      ? aiSections[key]
-      : fallbackSections[key];
+    const aiText = aiSections[key];
+    const isAI = aiText && typeof aiText === 'string';
+    result[key] = isAI ? aiText : fallbackSections[key];
+    // Track source for UI display
+    result[key + '_source'] = isAI ? 'ai' : 'fallback';
   }
 
   return result;
@@ -629,15 +795,23 @@ export async function generateComparableDescriptions(
       bedrooms: c.bedrooms,
       salePrice: c.salePrice,
       floorArea: c.floorArea,
+      floorAreaSource: c.floorAreaSource,
       epcRating: c.epcRating,
       currentDescription: c.description,
       status: c.status,
+      condition: c.condition,
+      parking: c.parking,
+      garden: c.garden,
+      tenure: c.tenure,
     }));
 
-    const userPrompt = `You are writing comparable property descriptions for a RICS valuation report. Each description should be a single concise sentence in the style:
+    const userPrompt = `You are writing comparable property descriptions for a RICS valuation report. Each description should be 2-3 concise sentences covering: floor area + source, bedrooms, property type, condition, notable features (parking, garden, tenure, lease term if available). Match this exact style from a real CoreProp report:
 
-"3 bedroom semi-detached house in fair / slightly dated order throughout. Off street parking and garage. Similar style."
-"2 bedroom terraced house in good order throughout. Rear garden. Modest proportions."
+"43m2 (agent floorplan) \n1 bedroom s/c second floor flat in basic order throughout. Purpose built block. Communal gardens. Leasehold. Similar style."
+"78m2 (agent floorplan) \n2 bedroom s/c ground floor flat in fair / modern order throughout. Purpose built block. Private rear garden. Off-street parking. Leasehold, 142 years remaining"
+"62m2 (agent floorplan) \n2-bedroom s/c ground floor flat in basic order throughout. Purpose built block. Private rear garden. Leasehold."
+
+Note the floor area and source always comes first on its own line, followed by the description. Use "s/c" for self-contained. Include "Similar style" if the property is comparable in type.
 
 Here are the comparables to describe:
 

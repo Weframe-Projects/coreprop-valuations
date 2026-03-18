@@ -68,6 +68,10 @@ export default function ComparablePanel({ comparables, postcode, onChange }: Com
     onChange(comparables.map((c) => c.id === id ? { ...c, description } : c));
   };
 
+  const updateAdjustmentNotes = (id: string, adjustmentNotes: string) => {
+    onChange(comparables.map((c) => c.id === id ? { ...c, adjustmentNotes } : c));
+  };
+
   const removeComparable = (id: string) => {
     onChange(comparables.filter((c) => c.id !== id));
   };
@@ -96,6 +100,12 @@ export default function ComparablePanel({ comparables, postcode, onChange }: Com
       isSelected: true,
       status: form.status,
       agentName: form.agentName.trim() || null,
+      condition: null,
+      parking: null,
+      garden: null,
+      frontPhotoUrl: null,
+      floorPlanUrl: null,
+      tenure: null,
     };
     onChange([...comparables, newComp]);
     setForm(EMPTY_FORM);
@@ -151,6 +161,7 @@ export default function ComparablePanel({ comparables, postcode, onChange }: Com
             comp={comp}
             onToggle={() => toggleComparable(comp.id)}
             onUpdateDescription={(desc) => updateDescription(comp.id, desc)}
+            onUpdateAdjustmentNotes={(notes) => updateAdjustmentNotes(comp.id, notes)}
             onRemove={comp.source === 'manual' ? () => removeComparable(comp.id) : undefined}
           />
         ))}
@@ -174,9 +185,9 @@ function ManualForm({
   return (
     <div className="my-4 rounded-lg border-2 border-dashed border-[#c49a6c]/40 bg-[#c49a6c]/5 p-5">
       <h4 className="mb-3 text-sm font-semibold text-gray-700">Add Comparable Manually</h4>
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Row 1: Address */}
-        <div className="col-span-4">
+        <div className="sm:col-span-2 lg:col-span-4">
           <input type="text" value={form.address} onChange={(e) => set('address', e.target.value)} placeholder="Full address" className={inputClass} />
         </div>
         {/* Row 2: Price, Date, Status, Type */}
@@ -209,11 +220,11 @@ function ManualForm({
         <div>
           <input type="number" min="0" step="1" value={form.floorArea} onChange={(e) => set('floorArea', e.target.value)} placeholder="Floor area (m&sup2;)" className={inputClass} />
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <input type="text" value={form.agentName} onChange={(e) => set('agentName', e.target.value)} placeholder={form.status !== 'SOLD' ? 'Agent name (e.g. Rightmove)' : 'Agent name (optional)'} className={inputClass} />
         </div>
         {/* Row 4: Description + Add button */}
-        <div className="col-span-3">
+        <div className="sm:col-span-1 lg:col-span-3">
           <input type="text" value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Brief description (e.g. &quot;3-bed semi in fair order&quot;)" className={inputClass} />
         </div>
         <div className="flex items-end">
@@ -235,11 +246,13 @@ function ComparableCard({
   comp,
   onToggle,
   onUpdateDescription,
+  onUpdateAdjustmentNotes,
   onRemove,
 }: {
   comp: Comparable;
   onToggle: () => void;
   onUpdateDescription: (desc: string) => void;
+  onUpdateAdjustmentNotes: (notes: string) => void;
   onRemove?: () => void;
 }) {
   const [editingDesc, setEditingDesc] = useState(false);
@@ -255,6 +268,8 @@ function ComparableCard({
     comp.bedrooms != null ? `${comp.bedrooms} bed` : '',
     comp.agentName ? `via ${comp.agentName}` : '',
   ].filter(Boolean).join(' \u00B7 ');
+
+  const streetViewUrl = `/api/map-image?type=streetview&address=${encodeURIComponent(comp.address)}&size=160x112`;
 
   return (
     <div
@@ -329,6 +344,29 @@ function ComparableCard({
               className="w-full rounded border border-[#c49a6c] px-2 py-1 text-xs text-gray-900 outline-none ring-2 ring-[#c49a6c]/20"
             />
           )}
+          {comp.isSelected && (
+            <input
+              type="text"
+              value={comp.adjustmentNotes ?? ''}
+              onChange={(e) => onUpdateAdjustmentNotes(e.target.value)}
+              placeholder="e.g. Similar but no garden, -£15k"
+              className="mt-1.5 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-900 placeholder-gray-400 focus:border-[#c49a6c] focus:outline-none focus:ring-2 focus:ring-[#c49a6c]/20"
+            />
+          )}
+        </div>
+        {/* Street View thumbnail */}
+        <div className="shrink-0 self-start">
+          <div className="w-20 h-14 rounded overflow-hidden bg-gray-100">
+            <img
+              src={streetViewUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                const parent = e.currentTarget.parentElement;
+                if (parent) parent.style.display = 'none';
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>

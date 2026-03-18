@@ -238,14 +238,39 @@ export async function searchEPCByAddress(
   });
 
   // Require a minimum similarity threshold to avoid returning unrelated properties
-  const MINIMUM_SIMILARITY = 0.3;
+  const MINIMUM_SIMILARITY = 0.25;
   const best = scored[0];
 
-  if (!best || best.score < MINIMUM_SIMILARITY) {
-    return null;
+  if (best && best.score >= MINIMUM_SIMILARITY) {
+    return best.epc;
   }
 
-  return best.epc;
+  // If fuzzy match on postcode results failed, try direct address search
+  // The EPC API also supports an 'address' parameter for broader matching
+  try {
+    const addressResponse = await epcFetch('/search', {
+      address: address.trim(),
+      size: '10',
+    });
+    const addressData = (await addressResponse.json()) as EPCApiResponse;
+    if (addressData?.rows?.length > 0) {
+      // Filter to matching postcode and return best match
+      const postcodeMatches = addressData.rows
+        .map(transformRow)
+        .filter(epc => epc.postcode.replace(/\s/g, '').toUpperCase() === postcode.replace(/\s/g, '').toUpperCase());
+      if (postcodeMatches.length > 0) {
+        // Return most recent
+        postcodeMatches.sort((a, b) => b.lodgementDate.localeCompare(a.lodgementDate));
+        return postcodeMatches[0];
+      }
+      // If no postcode match but address search returned results, return the first one
+      return transformRow(addressData.rows[0]);
+    }
+  } catch {
+    // Address search fallback failed — return null
+  }
+
+  return null;
 }
 
 /**

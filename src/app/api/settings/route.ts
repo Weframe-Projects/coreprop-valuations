@@ -19,6 +19,9 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Drive connection stored in auth user metadata — bypasses PostgREST entirely
+  const driveConnected = !!(user.user_metadata?.google_tokens);
+
   // If no settings exist yet, return defaults
   if (!data) {
     return NextResponse.json({
@@ -31,10 +34,16 @@ export async function GET() {
       firm_rics_number: '863315',
       firm_email: 'nick.green@coreprop.co.uk',
       firm_phone: '0203 143 0123',
+      terms_and_conditions: '',
+      google_tokens: driveConnected ? { connected: true } : null,
     });
   }
 
-  return NextResponse.json(data);
+  return NextResponse.json({
+    terms_and_conditions: '',
+    ...data,
+    google_tokens: driveConnected ? { connected: true } : null,
+  });
 }
 
 export async function PUT(request: Request) {
@@ -46,6 +55,10 @@ export async function PUT(request: Request) {
 
   const body = await request.json();
 
+  // Only upsert columns PostgREST knows about (v1 migration columns).
+  // terms_and_conditions was added via ALTER TABLE and PostgREST's schema cache
+  // hasn't refreshed — including it causes PGRST204. It will be re-added once
+  // the schema cache reloads (Supabase dashboard → Settings → API → Reload schema).
   const { data, error } = await supabase
     .from('settings')
     .upsert(
@@ -67,6 +80,7 @@ export async function PUT(request: Request) {
     .single();
 
   if (error) {
+    console.error('[settings PUT] Supabase error:', JSON.stringify(error));
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

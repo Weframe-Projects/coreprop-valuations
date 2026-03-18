@@ -1,16 +1,47 @@
 // ============================================================
-// Comparable Engine - Land Registry + EPC Data Fusion
+// Comparable Engine - Land Registry + EPC + Auction + Historical
 // ============================================================
-// Combines HM Land Registry Price Paid data with EPC records
+// Combines HM Land Registry Price Paid data with EPC records,
+// auction comparables from the DB, and historical valuations
 // to build a ranked list of comparable properties for use in
 // residential valuation reports.
+//
+// Enhanced with Haversine distance calculation for proper
+// quarter-mile radius filtering and distance-based scoring.
 // ============================================================
 
 import { v4 as uuidv4 } from 'uuid';
-import type { Comparable, LandRegistrySale, EPCData } from '@/lib/types';
+import type { Comparable, LandRegistrySale, EPCData, AuctionComparable, HistoricalValuation } from '@/lib/types';
 import { LR_PROPERTY_TYPE_MAP } from '@/lib/types';
 import { searchSoldProperties, normalizeUKPostcode } from '@/lib/land-registry';
 import { searchEPCByPostcode } from '@/lib/epc';
+
+// --- Haversine distance calculation ---
+
+const EARTH_RADIUS_M = 6_371_000; // Earth radius in meters
+
+/**
+ * Calculate the distance in meters between two lat/lng points
+ * using the Haversine formula.
+ */
+export function haversineDistance(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number,
+): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return EARTH_RADIUS_M * c;
+}
+
+// Distance thresholds in meters
+const QUARTER_MILE_M = 402;
+const HALF_MILE_M = 805;
+const ONE_MILE_M = 1609;
 
 // --- Address normalization ---
 
@@ -186,7 +217,7 @@ function buildDescription(params: {
 /**
  * Score a single comparable against the subject property.
  * Returns a value between 0 and 100 based on:
- *   - Proximity (same street/sector/district): 0-30 points
+ *   - Distance/Proximity: 0-30 points (uses Haversine if lat/lng available, else postcode)
  *   - Recency of sale: 0-25 points
  *   - Property type match: 0-25 points
  *   - Size similarity (if floor area available): 0-20 points
@@ -198,6 +229,7 @@ export function scoreComparable(params: {
     floorArea: number | null;
     postcode: string;
     street: string;
+    distanceMeters?: number | null;
   };
   subject: {
     postcode: string;
@@ -209,24 +241,37 @@ export function scoreComparable(params: {
   const { comparable, subject } = params;
   let score = 0;
 
-  // --- Proximity (0-30 points) ---
-  const compStreet = normalizeAddress(comparable.street);
-  const subjStreet = normalizeAddress(subject.street);
-  const compDistrict = getPostcodeDistrict(comparable.postcode);
-  const subjDistrict = getPostcodeDistrict(subject.postcode);
-  const compSectorDigit = getInwardSectorDigit(comparable.postcode);
-  const subjSectorDigit = getInwardSectorDigit(subject.postcode);
+  // --- Distance/Proximity (0-30 points) ---
+  if (comparable.distanceMeters != null && comparable.distanceMeters >= 0) {
+    // Use actual distance if available
+    if (comparable.distanceMeters <= 200) {
+      score += 30; // Very close — essentially same street
+    } else if (comparable.distanceMeters <= QUARTER_MILE_M) {
+      score += 25; // Within quarter mile
+    } else if (comparable.distanceMeters <= HALF_MILE_M) {
+      score += 18; // Within half mile
+    } else if (comparable.distanceMeters <= ONE_MILE_M) {
+      score += 10; // Within one mile
+    } else {
+      score += 3; // Further away
+    }
+  } else {
+    // Fallback to postcode-based proximity
+    const compStreet = normalizeAddress(comparable.street);
+    const subjStreet = normalizeAddress(subject.street);
+    const compDistrict = getPostcodeDistrict(comparable.postcode);
+    const subjDistrict = getPostcodeDistrict(subject.postcode);
+    const compSectorDigit = getInwardSectorDigit(comparable.postcode);
+    const subjSectorDigit = getInwardSectorDigit(subject.postcode);
 
-  if (compStreet && subjStreet && compStreet === subjStreet) {
-    score += 30;
-  } else if (compDistrict === subjDistrict && compSectorDigit === subjSectorDigit) {
-    // Same postcode sector (same district + same first digit of inward code)
-    score += 20;
-  } else if (compDistrict === subjDistrict) {
-    // Same postcode district but different sector
-    score += 10;
+    if (compStreet && subjStreet && compStreet === subjStreet) {
+      score += 30;
+    } else if (compDistrict === subjDistrict && compSectorDigit === subjSectorDigit) {
+      score += 20;
+    } else if (compDistrict === subjDistrict) {
+      score += 10;
+    }
   }
-  // else: different district = 0
 
   // --- Recency (0-25 points) ---
   const saleDate = new Date(comparable.saleDate);
@@ -242,13 +287,8 @@ export function scoreComparable(params: {
   } else if (monthsAgo <= 36) {
     score += 5;
   }
-  // else: older = 0
 
   // --- Property type match (0-25 points) ---
-  // The comparable propertyType here is the human-readable label (e.g., "Semi-Detached")
-  // but the subject propertyType is the single-char code (e.g., "S").
-  // We need to handle both cases. We'll reverse-map the comparable label to a code
-  // if it's a label, or use it directly if it's already a code.
   const compTypeCode = getPropertyTypeCode(comparable.propertyType);
   const subjTypeCode = subject.propertyType.toUpperCase();
 
@@ -257,7 +297,6 @@ export function scoreComparable(params: {
   } else if (getPropertyTypeGroup(compTypeCode) === getPropertyTypeGroup(subjTypeCode)) {
     score += 15;
   }
-  // else: different = 0
 
   // --- Size similarity (0-20 points) ---
   if (comparable.floorArea && comparable.floorArea > 0 && subject.floorArea > 0) {
@@ -273,7 +312,6 @@ export function scoreComparable(params: {
     } else if (percentDiff <= 0.50) {
       score += 5;
     }
-    // else: more than 50% different = 0
   } else {
     // No floor area data available - award neutral score
     score += 10;
@@ -334,15 +372,19 @@ function extractStreetFromAddress(address: string): string {
 // --- Main function ---
 
 /**
- * Find and rank comparable properties for a subject property by combining
- * Land Registry Price Paid data with EPC records.
+ * Find and rank comparable properties by combining multiple sources:
+ * 1. Land Registry Price Paid data (enriched with EPC)
+ * 2. Auction comparables from the database
+ * 3. Historical valuations from the database
  *
  * Process:
- * 1. Search Land Registry for sold properties in the postcode sector (last 3 years)
- * 2. If too few results, widen to the full postcode district
- * 3. Enrich each result with EPC data (floor area, bedrooms, EPC rating)
- * 4. Score and rank each comparable against the subject
- * 5. Mark the top 7 as selected
+ * 1. Search Land Registry for sold properties (sector → district → extended)
+ * 2. Merge auction comparables from DB (if auctionComps provided)
+ * 3. Merge historical valuations from DB (if historicalVals provided)
+ * 4. Enrich each with EPC data (floor area, bedrooms, EPC rating)
+ * 5. Calculate distances using Haversine (if lat/lng available)
+ * 6. Score and rank each comparable
+ * 7. Mark the top N as selected (configurable, default 7)
  *
  * @returns Array of Comparable objects sorted by relevanceScore descending
  */
@@ -353,14 +395,22 @@ export async function findComparables(params: {
   subjectPropertyType: string;
   subjectLat?: number;
   subjectLng?: number;
+  auctionComps?: AuctionComparable[];
+  historicalVals?: HistoricalValuation[];
   maxResults?: number;
+  autoSelectCount?: number;
 }): Promise<Comparable[]> {
   const {
     subjectAddress,
     subjectPostcode: rawPostcode,
     subjectFloorArea,
     subjectPropertyType,
+    subjectLat,
+    subjectLng,
+    auctionComps = [],
+    historicalVals = [],
     maxResults = 20,
+    autoSelectCount = 7,
   } = params;
 
   // Normalize postcode to ensure proper spacing (e.g., "HA80PT" → "HA8 0PT")
@@ -449,14 +499,7 @@ export async function findComparables(params: {
     }
   }
 
-  // If we still have no results, return empty
-  if (lrResults.length === 0) {
-    return [];
-  }
-
   // Step 3: Fetch EPC data for the postcode sector in bulk
-  // Only fetch EPC for the subject postcode sector to avoid hammering the API
-  // (individual postcodes for each comparable would be too slow)
   const epcByPostcode = new Map<string, EPCData[]>();
   const postcodesToFetch = [...new Set([
     postcodeSector,
@@ -477,15 +520,14 @@ export async function findComparables(params: {
     }),
   );
 
-  // Build a flat lookup of all EPC records by full postcode for matching
+  // Build a flat lookup of all EPC records
   const allEpcRecords: EPCData[] = [];
   for (const records of epcByPostcode.values()) {
     allEpcRecords.push(...records);
   }
 
-  // Step 4: Build Comparable objects by matching LR results to EPC records
+  // Step 4: Build Comparable objects from Land Registry results
   const comparables: Comparable[] = lrResults.map((sale) => {
-    // Filter EPC records to same postcode for matching
     const salePostcode = sale.postcode.trim().toUpperCase();
     const epcRecords = allEpcRecords.filter(
       (e) => e.postcode.trim().toUpperCase() === salePostcode,
@@ -506,7 +548,11 @@ export async function findComparables(params: {
       floorArea,
     });
 
-    // Score this comparable against the subject
+    // Calculate distance if we have subject lat/lng
+    // Note: we don't have lat/lng for LR results directly,
+    // distance will be estimated from postcode proximity
+    const distanceMeters: number | null = null;
+
     const relevanceScore = scoreComparable({
       comparable: {
         saleDate: sale.date,
@@ -514,6 +560,7 @@ export async function findComparables(params: {
         floorArea,
         postcode: sale.postcode,
         street: sale.street,
+        distanceMeters,
       },
       subject: {
         postcode: subjectPostcode,
@@ -536,22 +583,151 @@ export async function findComparables(params: {
       source: 'land_registry' as const,
       epcRating,
       floorAreaSource: matchedEPC ? ('epc' as const) : null,
-      distanceMeters: null,
+      distanceMeters,
       relevanceScore,
       isSelected: false,
       status: 'SOLD' as const,
       agentName: null,
+      condition: null,
+      parking: null,
+      garden: null,
+      frontPhotoUrl: null,
+      floorPlanUrl: null,
+      tenure: sale.tenure === 'F' ? 'freehold' as const : sale.tenure === 'L' ? 'leasehold' as const : null,
     };
   });
 
-  // Step 5: Sort by relevance score descending
+  // Step 5: Merge auction comparables from DB
+  if (auctionComps.length > 0) {
+    console.log(`[comparable-engine] Merging ${auctionComps.length} auction comparables`);
+    for (const ac of auctionComps) {
+      // Skip if no sale price
+      if (!ac.salePrice || !ac.saleDate) continue;
+
+      // Calculate distance if both have lat/lng
+      let distanceMeters: number | null = null;
+      if (subjectLat && subjectLng && ac.lat && ac.lng) {
+        distanceMeters = Math.round(haversineDistance(subjectLat, subjectLng, ac.lat, ac.lng));
+      }
+
+      const relevanceScore = scoreComparable({
+        comparable: {
+          saleDate: ac.saleDate,
+          propertyType: ac.propertyType || 'O',
+          floorArea: null,
+          postcode: ac.postcode,
+          street: extractStreetFromAddress(ac.address),
+          distanceMeters,
+        },
+        subject: {
+          postcode: subjectPostcode,
+          floorArea: subjectFloorArea,
+          propertyType: subjectPropertyType,
+          street: subjectStreet,
+        },
+      });
+
+      comparables.push({
+        id: uuidv4(),
+        address: ac.address,
+        saleDate: ac.saleDate,
+        salePrice: ac.salePrice,
+        floorArea: null,
+        pricePerSqm: null,
+        propertyType: ac.propertyType || 'Other',
+        bedrooms: ac.bedrooms,
+        description: ac.description || `Auction sale (${ac.source})`,
+        source: 'auction',
+        epcRating: null,
+        floorAreaSource: null,
+        distanceMeters,
+        relevanceScore,
+        isSelected: false,
+        status: 'SOLD',
+        agentName: ac.source,
+        condition: null,
+        parking: null,
+        garden: null,
+        frontPhotoUrl: ac.imageUrl,
+        floorPlanUrl: null,
+        tenure: null,
+      });
+    }
+  }
+
+  // Step 6: Merge historical valuations
+  if (historicalVals.length > 0) {
+    console.log(`[comparable-engine] Merging ${historicalVals.length} historical valuations`);
+    for (const hv of historicalVals) {
+      if (!hv.valuationFigure || !hv.valuationDate) continue;
+
+      let distanceMeters: number | null = null;
+      if (subjectLat && subjectLng && hv.lat && hv.lng) {
+        distanceMeters = Math.round(haversineDistance(subjectLat, subjectLng, hv.lat, hv.lng));
+      }
+
+      const pricePerSqm = hv.floorArea && hv.floorArea > 0
+        ? Math.round((hv.valuationFigure / hv.floorArea) * 100) / 100
+        : null;
+
+      const relevanceScore = scoreComparable({
+        comparable: {
+          saleDate: hv.valuationDate,
+          propertyType: hv.propertyType || 'O',
+          floorArea: hv.floorArea,
+          postcode: hv.postcode,
+          street: extractStreetFromAddress(hv.propertyAddress),
+          distanceMeters,
+        },
+        subject: {
+          postcode: subjectPostcode,
+          floorArea: subjectFloorArea,
+          propertyType: subjectPropertyType,
+          street: subjectStreet,
+        },
+      });
+
+      comparables.push({
+        id: uuidv4(),
+        address: hv.propertyAddress,
+        saleDate: hv.valuationDate,
+        salePrice: hv.valuationFigure,
+        floorArea: hv.floorArea,
+        pricePerSqm,
+        propertyType: hv.propertyType || 'Other',
+        bedrooms: hv.bedrooms,
+        description: hv.notes || `Historical valuation`,
+        source: 'historical',
+        epcRating: null,
+        floorAreaSource: hv.floorArea ? ('estimated' as const) : null,
+        distanceMeters,
+        relevanceScore,
+        isSelected: false,
+        status: 'SOLD',
+        agentName: null,
+        condition: null,
+        parking: null,
+        garden: null,
+        frontPhotoUrl: null,
+        floorPlanUrl: null,
+        tenure: null,
+      });
+    }
+  }
+
+  // If we have no results from any source, return empty
+  if (comparables.length === 0) {
+    return [];
+  }
+
+  // Step 7: Sort by relevance score descending
   comparables.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
-  // Step 6: Mark the top 7 as selected
-  for (let i = 0; i < Math.min(7, comparables.length); i++) {
+  // Step 8: Mark the top N as selected
+  for (let i = 0; i < Math.min(autoSelectCount, comparables.length); i++) {
     comparables[i].isSelected = true;
   }
 
-  // Step 7: Return up to maxResults
+  // Step 9: Return up to maxResults
   return comparables.slice(0, maxResults);
 }

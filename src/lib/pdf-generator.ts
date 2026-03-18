@@ -1,16 +1,26 @@
 // ============================================================
 // CoreProp Valuation Report - PDF Generator (Puppeteer)
+// Generates 3 separate PDFs (cover, content, back cover) and
+// merges them with pdf-lib for proper page headers/footers.
+//
+// Environment-aware: uses @sparticuz/chromium on Vercel/serverless,
+// falls back to full puppeteer for local development.
 // ============================================================
 
 import type {
   ReportType,
   Comparable,
   ClientDetails,
-  PropertyDetails,
   GoogleMapsData,
 } from '@/lib/types';
 import type { ReportTemplate } from '@/lib/report-templates';
-import { buildReportHTML } from '@/lib/pdf-template';
+import {
+  buildCoverHTML,
+  buildContentHTML,
+  buildBackCoverHTMLDoc,
+} from '@/lib/pdf-template';
+import type { ReportPhoto } from '@/lib/pdf-template';
+import { PDFDocument } from 'pdf-lib';
 
 // --- Types ---
 
@@ -20,43 +30,47 @@ export interface GeneratePDFInput {
   templateSections: ReportTemplate;
   comparables: Comparable[];
   clientDetails: ClientDetails;
-  propertyDetails: PropertyDetails;
+  propertyDetails: { [key: string]: unknown };
   googleMapsData: GoogleMapsData | null;
   valuationFigure: number;
   valuationFigureWords: string;
   auctionReserve?: number;
   auctionReserveWords?: string;
   variables: Record<string, string>;
+  reportPhotos?: ReportPhoto[];
+  firmSettings?: {
+    phone?: string;
+    email?: string;
+    address?: string;
+  };
 }
 
-// --- PDF Generation ---
+// --- Helpers ---
+
+/** Convert relative image paths (/api/...) to absolute URLs for Puppeteer */
+function absoluteImageUrls(html: string, baseUrl: string): string {
+  return html.replace(/src="\/(?!\/)/g, `src="${baseUrl}/`);
+}
 
 /**
- * Generate a PDF buffer from the full report data.
- *
- * 1. Builds an HTML string from the report data using `buildReportHTML`.
- * 2. Launches a headless Puppeteer browser and renders the HTML to an A4 PDF.
- * 3. Returns the PDF as a Node.js Buffer.
- *
- * Puppeteer is imported dynamically so that Next.js does not attempt to bundle
- * it during client-side compilation.
+ * Launch a headless browser.
+ * On Vercel/AWS Lambda: uses puppeteer-core + @sparticuz/chromium
+ * Locally: uses full puppeteer with its bundled Chromium
  */
-export async function generatePDF(data: GeneratePDFInput): Promise<Buffer> {
-  // Build the complete HTML document
-  let html = buildReportHTML(data);
+async function launchBrowser() {
+  const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
-  // Convert relative image paths to absolute URLs so Puppeteer can resolve them.
-  // In development this is http://localhost:3000, in production it would be the
-  // actual domain.
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-  html = html.replace(/src="\/(?!\/)/g, `src="${baseUrl}/`);
-
-  // Dynamic import for Next.js compatibility (Puppeteer is server-only)
-  const puppeteer = await import('puppeteer');
-
-  let browser;
-  try {
-    browser = await puppeteer.default.launch({
+  if (isServerless) {
+    const chromium = (await import('@sparticuz/chromium')).default;
+    const puppeteerCore = await import('puppeteer-core');
+    return puppeteerCore.default.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+  } else {
+    const puppeteer = await import('puppeteer');
+    return puppeteer.default.launch({
       headless: true,
       args: [
         '--no-sandbox',
@@ -65,37 +79,88 @@ export async function generatePDF(data: GeneratePDFInput): Promise<Buffer> {
         '--disable-gpu',
       ],
     });
+  }
+}
 
+// --- PDF Generation ---
+
+/**
+ * Generate a PDF buffer from the full report data.
+ *
+ * Three-part strategy for professional page layout:
+ *  1. Cover page    → zero margins, full-bleed dark background
+ *  2. Content pages → zero margins, header/footer embedded in HTML via CSS table trick
+ *  3. Back cover    → zero margins, full-bleed dark background
+ *
+ * The three PDFs are merged with pdf-lib into a single document.
+ */
+export async function generatePDF(data: GeneratePDFInput): Promise<Buffer> {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+
+  // Build 3 HTML documents
+  const coverHtml = absoluteImageUrls(buildCoverHTML(data), baseUrl);
+  const contentHtml = absoluteImageUrls(buildContentHTML(data), baseUrl);
+  const backCoverHtml = absoluteImageUrls(buildBackCoverHTMLDoc(data.firmSettings), baseUrl);
+
+  let browser;
+  try {
+    browser = await launchBrowser();
     const page = await browser.newPage();
 
-    // Set the HTML content. waitUntil: 'networkidle2' allows up to 2 open
-    // connections (more forgiving than networkidle0 for slow image loads).
-    await page.setContent(html, {
-      waitUntil: 'networkidle2',
-      timeout: 30_000,
-    });
+    // Helper: load HTML content into the page.
+    async function loadPageContent(html: string, imageWaitMs = 3_000) {
+      await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      await new Promise((resolve) => setTimeout(resolve, imageWaitMs));
+    }
 
-    // Generate the PDF
-    const pdfUint8Array = await page.pdf({
+    // --------------------------------------------------
+    // 1. COVER PAGE (full-bleed, no header/footer)
+    // --------------------------------------------------
+    await loadPageContent(coverHtml, 8_000);
+    const coverPdf = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: {
-        top: '20mm',
-        bottom: '20mm',
-        left: '25mm',
-        right: '25mm',
-      },
-      displayHeaderFooter: true,
-      headerTemplate: '<div></div>',
-      footerTemplate: `
-        <div style="width: 100%; text-align: center; font-size: 8pt; color: #999; padding: 0 25mm;">
-          <span class="pageNumber"></span> of <span class="totalPages"></span>
-        </div>
-      `,
+      margin: { top: '0mm', bottom: '0mm', left: '0mm', right: '0mm' },
     });
 
-    // Puppeteer returns a Uint8Array; convert to a Node Buffer
-    return Buffer.from(pdfUint8Array);
+    // --------------------------------------------------
+    // 2. CONTENT PAGES
+    // Header/footer are embedded directly in the HTML using a CSS
+    // table layout trick (<thead>/<tfoot> repeat on every printed page).
+    // This gives full control over backgrounds, colors, and layout
+    // without Puppeteer's quirky displayHeaderFooter.
+    // --------------------------------------------------
+    await loadPageContent(contentHtml, 15_000);
+    const contentPdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      displayHeaderFooter: false,
+      margin: { top: '0mm', bottom: '16mm', left: '0mm', right: '0mm' },
+    });
+
+    // --------------------------------------------------
+    // 3. BACK COVER (full-bleed, no header/footer)
+    // --------------------------------------------------
+    await loadPageContent(backCoverHtml, 5_000);
+    const backCoverPdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '0mm', bottom: '0mm', left: '0mm', right: '0mm' },
+    });
+
+    // --------------------------------------------------
+    // 4. MERGE all three PDFs
+    // --------------------------------------------------
+    const mergedDoc = await PDFDocument.create();
+
+    for (const pdfBytes of [coverPdf, contentPdf, backCoverPdf]) {
+      const doc = await PDFDocument.load(pdfBytes);
+      const pages = await mergedDoc.copyPages(doc, doc.getPageIndices());
+      pages.forEach((p) => mergedDoc.addPage(p));
+    }
+
+    const mergedBytes = await mergedDoc.save();
+    return Buffer.from(mergedBytes);
   } finally {
     if (browser) {
       await browser.close();

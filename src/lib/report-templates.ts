@@ -3,7 +3,7 @@
 // ============================================================
 
 import type { ReportType, UserSettings } from '@/lib/types';
-import { isIHTType } from '@/lib/types';
+import { isIHTType, isInspectedType, isAuctionType } from '@/lib/types';
 
 // --- Template Interface ---
 
@@ -87,6 +87,26 @@ function getInstructions(reportType: ReportType): string {
         '',
         '1.3. We have been instructed by {{AUCTION_COMPANY}}.',
       ].join('\n');
+
+    case 'aso_inspected':
+    case 'aso_desktop':
+      return [
+        '1.1. The CoreProp Group has been instructed by {{CLIENT_NAME}}.',
+        '',
+        '1.2. Our instructions are to prepare a Shared Ownership Market Valuation advice on the Property.',
+        '',
+        '1.3. Our instructions are that the Valuation should be as at, {{VALUATION_DATE}}.',
+      ].join('\n');
+
+    case 'portfolio_inspected':
+    case 'portfolio_desktop':
+      return [
+        '1.1. The CoreProp Group has been instructed by {{CLIENT_NAME}}.',
+        '',
+        '1.2. Our instructions are to prepare Market Valuation advice on the Property as part of a portfolio valuation.',
+        '',
+        '1.3. Our instructions are that the Valuation should be as at, {{VALUATION_DATE}}.',
+      ].join('\n');
   }
 }
 
@@ -134,58 +154,64 @@ function getBasisOfValuation(reportType: ReportType): string {
         '',
         'In arriving at Market Value, the following assumptions must be made:- The sale is a hypothetical sale; The vendor is a hypothetical, prudent and willing party to the transaction; The purchaser is a hypothetical, prudent and willing party to the transaction (unless considered a "special purchaser").',
       ].join('\n');
+
+    case 'aso_inspected':
+    case 'aso_desktop':
+    case 'portfolio_inspected':
+    case 'portfolio_desktop':
+      return [
+        '2.1. We have valued the property using the basis of Market Value as defined in the Appraisal and Valuation Standards of the Royal Institution of Chartered Surveyors.',
+        '',
+        '2.2. Market Value - The purpose of the valuation is to provide you with Open Market Valuation advice as defined by the RICS International Valuation Standards. The report will comply with the RICS Red Book (UK Edition) standards and will be conducted and signed off by an RICS Registered Valuer.',
+        '',
+        '2.3. Definition of Market Value - The estimated amount for which an asset or liability should exchange on the valuation date between a willing buyer and a willing seller in an arm\'s length transaction, after proper marketing and where the parties had each acted knowledgeably, prudently and without compulsion.',
+        '',
+        '2.4. In arriving at Market Value, the following assumptions must be made:- The sale is a hypothetical sale; The vendor is a hypothetical, prudent and willing party to the transaction; The purchaser is a hypothetical, prudent and willing party to the transaction (unless considered a "special purchaser").',
+      ].join('\n');
   }
 }
 
 // --- Section 3: Assumptions and Sources of Information ---
 
-function getAssumptionsAndSources(reportType: ReportType): string {
-  const isInspected =
-    reportType === 'iht_inspected' ||
-    reportType === 'current_market_inspected' ||
-    reportType === 'auction_inspected' ||
-    reportType === 'ha_current_market_auction';
+function getAssumptionsAndSources(reportType: ReportType, options?: { hasTitleNumber?: boolean }): string {
+  const isInspected = isInspectedType(reportType);
+  const hasTitleNumber = options?.hasTitleNumber ?? true;
 
-  const preamble = [
-    '3.1. In undertaking our valuation, we have made a number of assumptions and have relied upon certain sources of information. These matters are referred to below and within Appendix 1:',
-    '',
-    '3.1.1. Land Registry Title \u2013 {{LAND_REGISTRY_TITLE}} ({{TENURE_TYPE}}). It is assumed the vendor has an unencumbered {{TENURE_TYPE_LOWER}} title, unless otherwise stated.',
-    '',
-    '3.1.2. Land Registry House Price Index - Specifically the {{LOCAL_AUTHORITY}}.',
-    '',
-    '3.1.3. Land Registry House Price Index - Published sales figures for properties in the Postal District {{POSTAL_DISTRICT}}.',
-    '',
-    '3.1.4. Soil Survey - Geological, mining and soil investigation reports have not been obtained, nor have such reports been inspected. It is not therefore possible for us to certify that any land is capable of further development or redevelopment at a reasonable cost for the use which it is allocated in the relevant Structure Plan or for which Planning Consent could be obtained or that any present structures are unaffected by actual or potential settlement due to mining, low ground bearing capacity etc. or underground vegetation growth such as Japanese Knotweed etc.',
-    '',
-    '3.1.5. Contamination, Hazardous Substances and Environmental Matters - We have not arranged for any investigation to be carried out to determine whether or not any deleterious or hazardous material may be present at the site/property or in the surrounding area. Nor have we carried out any investigation into past or present uses either of the property or of any neighbouring land to establish whether there is any contamination or potential for contamination to the subject property from these uses or sites. We are, therefore, unable to report that the property is free from risk in this respect. For the purpose of this valuation, we have assumed that such investigation would not disclose the presence of any such material to any significant extent. However, should it be established subsequently that contamination, seepage or pollution exists at the property or on any neighbouring land, or that the premises have been or are being put to a contaminative use, this might reduce the values now reported.',
-  ];
+  // Build assumption items dynamically — title number line is conditional
+  const items: string[] = [];
 
-  // For inspected types, add the floor areas clause and adjust subsequent numbering
+  if (hasTitleNumber) {
+    items.push('Land Registry Title \u2013 {{LAND_REGISTRY_TITLE}} ({{TENURE_TYPE}}). It is assumed the vendor has an unencumbered {{TENURE_TYPE_LOWER}} title, unless otherwise stated.');
+  }
+
+  items.push(
+    'Land Registry House Price Index - Specifically the {{LOCAL_AUTHORITY}}.',
+    'Land Registry House Price Index - Published sales figures for properties in the Postal District {{POSTAL_DISTRICT}}.',
+    'Soil Survey - Geological, mining and soil investigation reports have not been obtained, nor have such reports been inspected. It is not therefore possible for us to certify that any land is capable of further development or redevelopment at a reasonable cost for the use which it is allocated in the relevant Structure Plan or for which Planning Consent could be obtained or that any present structures are unaffected by actual or potential settlement due to mining, low ground bearing capacity etc. or underground vegetation growth such as Japanese Knotweed etc.',
+    'Contamination, Hazardous Substances and Environmental Matters - We have not arranged for any investigation to be carried out to determine whether or not any deleterious or hazardous material may be present at the site/property or in the surrounding area. Nor have we carried out any investigation into past or present uses either of the property or of any neighbouring land to establish whether there is any contamination or potential for contamination to the subject property from these uses or sites. We are, therefore, unable to report that the property is free from risk in this respect. For the purpose of this valuation, we have assumed that such investigation would not disclose the presence of any such material to any significant extent. However, should it be established subsequently that contamination, seepage or pollution exists at the property or on any neighbouring land, or that the premises have been or are being put to a contaminative use, this might reduce the values now reported.',
+  );
+
   if (isInspected) {
-    preamble.push(
-      '',
-      '3.1.6. Floor Areas - We have relied upon our own measurements and have calculated internal floor areas in accordance with the Code of Measuring Practice issued by the Royal Institution of Chartered Surveyors.',
-      '',
-      '3.1.7. Statutory Requirements - Unless stated to the contrary in the reports upon title, we have assumed that the properties comply with all necessary statutory requirements including fire and building regulations.',
-      '',
-      '3.1.8. Planning - Where necessary we have made informal, verbal enquiries of local planning and other relevant public Authorities. Unless it is apparent from such verbal enquiries, we have assumed that the property and its use comply with current planning requirements and legislation.',
-      '',
-      '3.1.9. Information - We have assumed that the information supplied to us in respect of the property is correct and that details of all matters likely to affect value have either been made available to us or are known to us and that the information is up to date.',
-      '',
-      '3.1.10. Plant and Machinery - Our valuation has been undertaken on the basis that it includes such fittings as would normally be regarded as fixtures and fittings.',
-    );
-  } else {
-    preamble.push(
-      '',
-      '3.1.6. Statutory Requirements - Unless stated to the contrary in the reports upon title, we have assumed that the properties comply with all necessary statutory requirements including fire and building regulations.',
-      '',
-      '3.1.7. Planning - Where necessary we have made informal, verbal enquiries of local planning and other relevant public Authorities. Unless it is apparent from such verbal enquiries, we have assumed that the property and its use comply with current planning requirements and legislation.',
-      '',
-      '3.1.8. Information - We have assumed that the information supplied to us in respect of the property is correct and that details of all matters likely to affect value have either been made available to us or are known to us and that the information is up to date.',
-      '',
-      '3.1.9. Plant and Machinery - Our valuation has been undertaken on the basis that it includes such fittings as would normally be regarded as fixtures and fittings.',
+    items.push(
+      'Floor Areas - We have relied upon our own measurements and have calculated internal floor areas in accordance with the Code of Measuring Practice issued by the Royal Institution of Chartered Surveyors.',
     );
   }
+
+  items.push(
+    'Statutory Requirements - Unless stated to the contrary in the reports upon title, we have assumed that the properties comply with all necessary statutory requirements including fire and building regulations.',
+    'Planning - Where necessary we have made informal, verbal enquiries of local planning and other relevant public Authorities. Unless it is apparent from such verbal enquiries, we have assumed that the property and its use comply with current planning requirements and legislation.',
+    'Information - We have assumed that the information supplied to us in respect of the property is correct and that details of all matters likely to affect value have either been made available to us or are known to us and that the information is up to date.',
+    'Plant and Machinery - Our valuation has been undertaken on the basis that it includes such fittings as would normally be regarded as fixtures and fittings.',
+  );
+
+  // Build the numbered output
+  const preamble = [
+    '3.1. In undertaking our valuation, we have made a number of assumptions and have relied upon certain sources of information. These matters are referred to below and within Appendix 1:',
+  ];
+
+  items.forEach((item, i) => {
+    preamble.push('', `3.1.${i + 1}. ${item}`);
+  });
 
   return preamble.join('\n');
 }
@@ -193,11 +219,7 @@ function getAssumptionsAndSources(reportType: ReportType): string {
 // --- Section 4: Inspection ---
 
 function getInspection(reportType: ReportType): string {
-  const isInspected =
-    reportType === 'iht_inspected' ||
-    reportType === 'current_market_inspected' ||
-    reportType === 'auction_inspected' ||
-    reportType === 'ha_current_market_auction';
+  const isInspected = isInspectedType(reportType);
 
   if (isInspected) {
     return [
@@ -292,12 +314,7 @@ function getValuationConclusion(): string {
 // --- Auction Reserve Section ---
 
 function getAuctionReserveSection(reportType: ReportType): string | null {
-  const isAuction =
-    reportType === 'auction_inspected' ||
-    reportType === 'auction_desktop' ||
-    reportType === 'ha_current_market_auction';
-
-  if (!isAuction) {
+  if (!isAuctionType(reportType)) {
     return null;
   }
 
@@ -308,19 +325,9 @@ function getAuctionReserveSection(reportType: ReportType): string | null {
   ].join('\n');
 }
 
-// --- Signature Block ---
-
-function getSignatureBlock(reportType: ReportType): string {
-  if (reportType === 'iht_inspected' || reportType === 'iht_desktop') {
-    return 'Nicholas Green MRICS\nRICS Registered Valuer';
-  }
-
-  return 'Nicholas Green MRICS on behalf of The CoreProp Group\nRICS Registered Valuer\nGroup Managing Director';
-}
-
 // --- Appendix 1: RICS Standard T&Cs ---
 
-const APPENDIX_1 = `The CoreProp Group - RICS Standard Valuation Terms and Conditions
+const APPENDIX_1_TEMPLATE = `The CoreProp Group - RICS Standard Valuation Terms and Conditions
 
 It is important to read these Terms and Conditions carefully as they form the basis of the contract between the parties and the use of the valuation report.
 
@@ -402,9 +409,22 @@ It is important to read these Terms and Conditions carefully as they form the ba
 
 39. The valuer will assume that all usual mains services are connected or are available under normal terms and that the roads, sewers and services outside the cartilage of the property are the responsibility of the Local Authority or other statutory body.
 
-40. The CoreProp Group Limited is regulated by RICS for the provision of surveying services (firm no. 863315). This means we agree to uphold the RICS Rules of Conduct for Firms and all other applicable mandatory professional practice requirements of RICS, which can be found at www.rics.org. As an RICS regulated firm we have committed to cooperating with RICS in ensuring compliance with its standards. The firm's nominated RICS Responsible Principal is Nicholas Green MRICS whom is a Partner of this firm and can be reached at nick.green@coreprop.co.uk or 0203 143 0123.
+40. The CoreProp Group Limited is regulated by RICS for the provision of surveying services (firm no. {{FIRM_RICS_NUMBER}}). This means we agree to uphold the RICS Rules of Conduct for Firms and all other applicable mandatory professional practice requirements of RICS, which can be found at www.rics.org. As an RICS regulated firm we have committed to cooperating with RICS in ensuring compliance with its standards. The firm's nominated RICS Responsible Principal is {{FIRM_SIGNATORY}} whom is a Partner of this firm and can be reached at {{FIRM_EMAIL}} or {{FIRM_PHONE}}.
 
 41. The firm has a complaints handling procedure and a copy can be sent to you upon request.`;
+
+/**
+ * Returns the Appendix 1 T&Cs with firm details filled in from settings.
+ */
+function getAppendix1(settings?: UserSettings | null): string {
+  if (settings?.termsAndConditions?.trim()) return settings.termsAndConditions;
+
+  return APPENDIX_1_TEMPLATE
+    .replace(/\{\{FIRM_RICS_NUMBER\}\}/g, settings?.firmRicsNumber || '863315')
+    .replace(/\{\{FIRM_SIGNATORY\}\}/g, settings?.signatoryName || 'Nicholas Green MRICS')
+    .replace(/\{\{FIRM_EMAIL\}\}/g, settings?.firmEmail || 'nick.green@coreprop.co.uk')
+    .replace(/\{\{FIRM_PHONE\}\}/g, settings?.firmPhone || '0203 143 0123');
+}
 
 // ============================================================
 // Main Template Generator
@@ -417,18 +437,25 @@ It is important to read these Terms and Conditions carefully as they form the ba
  * Sections 5-15 (property description, location, accommodation, condition, etc.)
  * are AI-generated from structured form inputs and are not included in the template.
  */
-export function getReportTemplate(reportType: ReportType, settings?: UserSettings | null): ReportTemplate {
+export function getReportTemplate(
+  reportType: ReportType,
+  settings?: UserSettings | null,
+  options?: { hasTitleNumber?: boolean },
+): ReportTemplate {
+  // Use custom T&Cs from settings if available, otherwise use default with firm details filled
+  const appendix1 = getAppendix1(settings);
+
   return {
     instructions: getInstructions(reportType),
     basisOfValuation: getBasisOfValuation(reportType),
-    assumptionsAndSources: getAssumptionsAndSources(reportType),
+    assumptionsAndSources: getAssumptionsAndSources(reportType, { hasTitleNumber: options?.hasTitleNumber }),
     inspection: getInspection(reportType),
     comparableDataIntro: getComparableDataIntro(),
     marketCommentary: getMarketCommentaryForType(reportType, settings),
     valuationConclusion: getValuationConclusion(),
     auctionReserveSection: getAuctionReserveSection(reportType),
     signatureBlock: getSignatureBlockForType(reportType, settings),
-    appendix1: APPENDIX_1,
+    appendix1,
   };
 }
 

@@ -91,7 +91,7 @@ async function checkLongTermRisk(
     });
 
     if (!response.ok) {
-      return 'very_low'; // Default if API unavailable
+      return 'unknown'; // Default if API unavailable
     }
 
     const data = (await response.json()) as {
@@ -109,7 +109,7 @@ async function checkLongTermRisk(
     // Property is within a designated flood area
     return 'low';
   } catch {
-    return 'very_low';
+    return 'unknown';
   }
 }
 

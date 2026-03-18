@@ -1,3 +1,6 @@
+// Vercel serverless: allow up to 120s for AI generation + data fetching
+export const maxDuration = 120;
+
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { searchEPCByAddress } from '@/lib/epc';
@@ -5,6 +8,8 @@ import { fetchGoogleMapsData } from '@/lib/google-maps';
 import { findComparables } from '@/lib/comparable-engine';
 import { generateReportSections, generateComparableDescriptions } from '@/lib/ai-generator';
 import { getReportTemplate, fillTemplate } from '@/lib/report-templates';
+import { fetchAllDataSources } from '@/lib/data-sources';
+import { parseRoomMeasurements } from '@/lib/floor-area-parser';
 import type {
   ReportRow,
   EPCData,
@@ -13,6 +18,9 @@ import type {
   PropertyDetails,
   UserSettings,
   ReportType,
+  StructuredInspectionNotes,
+  AuctionComparable,
+  HistoricalValuation,
 } from '@/lib/types';
 import { isAuctionType, isIHTType } from '@/lib/types';
 import { parseEPCDescriptions, parseWindowType, parseHeatingSystem } from '@/lib/epc-parser';
@@ -71,14 +79,56 @@ export async function POST(
         firmRicsNumber: settingsRow.firm_rics_number,
         firmEmail: settingsRow.firm_email,
         firmPhone: settingsRow.firm_phone,
+        termsAndConditions: settingsRow.terms_and_conditions || '',
       }
     : null;
+
+  // Load structured inspection notes (if any)
+  const { data: inspectionNotesRow } = await supabase
+    .from('inspection_notes')
+    .select('*')
+    .eq('report_id', id)
+    .single();
+
+  const structuredNotes: StructuredInspectionNotes | null = inspectionNotesRow
+    ? {
+        inspectionDate: inspectionNotesRow.inspection_date || '',
+        inspectorInitials: inspectionNotesRow.inspector_initials || '',
+        timeOfDay: inspectionNotesRow.time_of_day || 'morning',
+        weatherConditions: inspectionNotesRow.weather_conditions || '',
+        descriptionNotes: inspectionNotesRow.description_notes || '',
+        constructionNotes: inspectionNotesRow.construction_notes || '',
+        amenitiesNotes: inspectionNotesRow.amenities_notes || '',
+        layoutNotes: inspectionNotesRow.layout_notes || '',
+        heatingNotes: inspectionNotesRow.heating_notes || '',
+        windowsNotes: inspectionNotesRow.windows_notes || '',
+        gardenNotes: inspectionNotesRow.garden_notes || '',
+        sizingNotes: inspectionNotesRow.sizing_notes || '',
+        conditionNotes: inspectionNotesRow.condition_notes || '',
+        extraNotes: inspectionNotesRow.extra_notes || '',
+      }
+    : null;
+
+  // Load report photos with any analysis data
+  const { data: reportPhotos } = await supabase
+    .from('report_photos')
+    .select('label, analysis')
+    .eq('report_id', id)
+    .order('sort_order', { ascending: true });
+
+  const photoAnalysis: { label: string; analysis: string }[] = (reportPhotos || [])
+    .filter((p: { label: string; analysis?: string | null }) => p.analysis)
+    .map((p: { label: string; analysis?: string | null }) => ({
+      label: p.label,
+      analysis: p.analysis!,
+    }));
 
   // Track what succeeded and what failed
   const pipeline: Record<string, 'pending' | 'success' | 'failed'> = {
     epc: 'pending',
     google_maps: 'pending',
     flood_risk: 'pending',
+    data_sources: 'pending',
     comparables: 'pending',
     ai_sections: 'pending',
   };
@@ -217,7 +267,11 @@ export async function POST(
         postcode: reportRow.postcode,
       });
       pipeline.flood_risk = 'success';
-      await savePartial({ flood_risk_data: floodRiskData });
+      try {
+        await savePartial({ flood_risk_data: floodRiskData });
+      } catch {
+        console.warn('[generate] flood_risk_data column may not exist, skipping save');
+      }
     } catch (error) {
       pipeline.flood_risk = 'failed';
       console.error('[generate] Flood risk check failed:', error);
@@ -225,6 +279,122 @@ export async function POST(
   } else {
     pipeline.flood_risk = 'failed';
     console.error('[generate] Flood risk skipped: no lat/lng available');
+  }
+
+  // -------------------------------------------------------
+  // Step 2.7: Conservation Area + Listed Buildings (parallel)
+  // -------------------------------------------------------
+  if (googleMapsData && googleMapsData.lat && googleMapsData.lng) {
+    try {
+      const dataSources = await fetchAllDataSources({
+        lat: googleMapsData.lat,
+        lng: googleMapsData.lng,
+        postcode: reportRow.postcode,
+      });
+      pipeline.data_sources = 'success';
+
+      const dsUpdates: Record<string, unknown> = {};
+      if (dataSources.conservationArea.isConservationArea) {
+        dsUpdates.conservation_area = true;
+      } else {
+        dsUpdates.conservation_area = false;
+      }
+      if (dataSources.listedBuilding.isListed) {
+        dsUpdates.listed_building_grade = dataSources.listedBuilding.grade;
+      }
+
+      if (Object.keys(dsUpdates).length > 0) {
+        try {
+          await savePartial(dsUpdates);
+        } catch {
+          console.warn('[generate] conservation_area/listed_building columns may not exist, skipping save');
+        }
+      }
+
+      console.log(`[generate] Data sources: conservation=${dataSources.conservationArea.isConservationArea}, listed=${dataSources.listedBuilding.isListed ? dataSources.listedBuilding.grade : 'no'}`);
+    } catch (error) {
+      pipeline.data_sources = 'failed';
+      console.error('[generate] Data sources check failed:', error);
+    }
+  } else {
+    pipeline.data_sources = 'failed';
+    console.error('[generate] Data sources skipped: no lat/lng available');
+  }
+
+  // -------------------------------------------------------
+  // Step 2.8: Load auction comparables + historical valuations from DB
+  // -------------------------------------------------------
+  let auctionComps: AuctionComparable[] = [];
+  let historicalVals: HistoricalValuation[] = [];
+
+  // Load auction comps and historical valuations (tables may not exist if migration not run)
+  try {
+    const postcodeDistrict = reportRow.postcode.trim().toUpperCase().split(/\s+/)[0];
+    const { data: auctionRows } = await supabase
+      .from('auction_comparables')
+      .select('*')
+      .ilike('postcode', `${postcodeDistrict}%`)
+      .order('sale_date', { ascending: false })
+      .limit(30);
+
+    if (auctionRows && auctionRows.length > 0) {
+      auctionComps = auctionRows.map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        source: r.source as AuctionComparable['source'],
+        address: r.address as string,
+        postcode: r.postcode as string,
+        salePrice: r.sale_price as number | null,
+        saleDate: r.sale_date as string | null,
+        propertyType: r.property_type as string | null,
+        lotNumber: r.lot_number as string | null,
+        auctionDate: r.auction_date as string | null,
+        bedrooms: r.bedrooms as number | null,
+        description: (r.description as string) || '',
+        imageUrl: r.image_url as string | null,
+        url: (r.url as string) || '',
+        lat: r.lat as number | null,
+        lng: r.lng as number | null,
+      }));
+      console.log(`[generate] Loaded ${auctionComps.length} auction comparables for district ${postcodeDistrict}`);
+    }
+  } catch {
+    // Table may not exist if v2 migration not run — silently skip
+    console.warn('[generate] auction_comparables table not available, skipping');
+  }
+
+  try {
+    const postcodeDistrict = reportRow.postcode.trim().toUpperCase().split(/\s+/)[0];
+    const { data: histRows } = await supabase
+      .from('historical_valuations')
+      .select('*')
+      .eq('user_id', user.id)
+      .ilike('postcode', `${postcodeDistrict}%`)
+      .order('valuation_date', { ascending: false })
+      .limit(20);
+
+    if (histRows && histRows.length > 0) {
+      historicalVals = histRows.map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        userId: r.user_id as string,
+        propertyAddress: r.property_address as string,
+        postcode: r.postcode as string,
+        valuationFigure: r.valuation_figure as number | null,
+        valuationDate: r.valuation_date as string | null,
+        reportType: r.report_type as string | null,
+        propertyType: r.property_type as string | null,
+        floorArea: r.floor_area as number | null,
+        bedrooms: r.bedrooms as number | null,
+        notes: (r.notes as string) || '',
+        storagePath: r.storage_path as string | null,
+        lat: r.lat as number | null,
+        lng: r.lng as number | null,
+        createdAt: r.created_at as string,
+      }));
+      console.log(`[generate] Loaded ${historicalVals.length} historical valuations for district ${postcodeDistrict}`);
+    }
+  } catch {
+    // Table may not exist if v2 migration not run — silently skip
+    console.warn('[generate] historical_valuations table not available, skipping');
   }
 
   // -------------------------------------------------------
@@ -251,6 +421,8 @@ export async function POST(
       subjectPropertyType,
       subjectLat: googleMapsData?.lat,
       subjectLng: googleMapsData?.lng,
+      auctionComps,
+      historicalVals,
     });
     pipeline.comparables = 'success';
 
@@ -357,6 +529,15 @@ export async function POST(
       auctionCompany?: string;
     };
 
+    // Parse room measurements from sizing notes to calculate floor area
+    let measuredFloorArea: number | undefined;
+    if (structuredNotes?.sizingNotes) {
+      const { totalArea, measurementCount } = parseRoomMeasurements(structuredNotes.sizingNotes);
+      if (measurementCount > 0 && totalArea > 0) {
+        measuredFloorArea = totalArea;
+      }
+    }
+
     const aiSections = await generateReportSections({
       reportType: currentRow.report_type,
       propertyDetails: fullPropertyDetails,
@@ -372,28 +553,32 @@ export async function POST(
         valuationDate: clientDetails.valuationDate || new Date().toISOString().split('T')[0],
         auctionCompany: clientDetails.auctionCompany || '',
       },
+      structuredNotes,
+      photoAnalysis,
+      measuredFloorArea,
     });
 
     // Get template sections (boilerplate text)
-    const template = getReportTemplate(currentRow.report_type, settings);
+    const hasTitleNumber = !!(currentRow.land_registry_title && currentRow.land_registry_title.trim());
+    const template = getReportTemplate(currentRow.report_type, settings, { hasTitleNumber });
 
     // Build template variables for placeholder replacement
     const cd = clientDetails;
     const templateVars: Record<string, string> = {
       CLIENT_NAME: cd.clientName || '[Client Name]',
       VALUATION_DATE: formatDate(cd.valuationDate || ''),
-      REFERENCE_NUMBER: cd.referenceNumber || currentRow.reference_number || '',
+      REFERENCE_NUMBER: cd.referenceNumber || currentRow.reference_number || (structuredNotes?.inspectorInitials ? `${structuredNotes.inspectorInitials}/${reportRow.postcode.replace(/\s+/g, '')}` : ''),
       DECEASED_NAME: cd.deceasedName || '[Deceased Name]',
       DATE_OF_DEATH: formatDate(cd.dateOfDeath || ''),
       AUCTION_COMPANY: cd.auctionCompany || '[Auction Company]',
-      LAND_REGISTRY_TITLE: currentRow.land_registry_title || '[Title Number]',
+      LAND_REGISTRY_TITLE: hasTitleNumber ? currentRow.land_registry_title : '',
       TENURE_TYPE: fullPropertyDetails.tenure === 'freehold' ? 'Freehold' : 'Leasehold',
       TENURE_TYPE_LOWER: fullPropertyDetails.tenure === 'freehold' ? 'freehold' : 'leasehold',
       LOCAL_AUTHORITY: currentRow.local_authority || googleMapsData?.localAuthority || '[Local Authority]',
       POSTAL_DISTRICT: currentRow.postal_district || reportRow.postcode.split(/\s+/)[0] || '[Postal District]',
-      INSPECTION_DATE: formatDate(cd.valuationDate || ''),
-      INSPECTION_TIME_OF_DAY: 'morning',
-      WEATHER_CONDITIONS: 'dry and clear',
+      INSPECTION_DATE: formatDate(structuredNotes?.inspectionDate || cd.valuationDate || ''),
+      INSPECTION_TIME_OF_DAY: structuredNotes?.timeOfDay || 'morning',
+      WEATHER_CONDITIONS: structuredNotes?.weatherConditions || 'dry and clear',
       VALUATION_FIGURE: currentRow.valuation_figure?.toLocaleString('en-GB') || '[Figure]',
       VALUATION_WORDS: currentRow.valuation_figure_words || '[Amount in Words]',
       AUCTION_RESERVE: currentRow.auction_reserve?.toLocaleString('en-GB') || '[Reserve]',
@@ -401,12 +586,37 @@ export async function POST(
       AUCTION_MONTH_YEAR: formatMonthYear(cd.valuationDate || ''),
     };
 
-    // Append flood risk note to assumptions if available
+    // Append data source notes to assumptions if available
     let assumptionsText = fillTemplate(template.assumptionsAndSources, templateVars);
+    // Find the highest existing 3.1.X number in the assumptions text
+    const existingNums = [...assumptionsText.matchAll(/3\.1\.(\d+)\./g)].map(m => parseInt(m[1]));
+    let noteNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : 10;
+
     if (floodRiskData) {
       const floodNote = formatFloodRiskNote(floodRiskData);
-      const nextNum = assumptionsText.includes('3.1.10.') ? '3.1.11.' : '3.1.10.';
-      assumptionsText += `\n\n${nextNum} Flood Risk - ${floodNote}`;
+      assumptionsText += `\n\n3.1.${noteNum}. Flood Risk - ${floodNote}`;
+      noteNum++;
+    }
+
+    // Re-read report for conservation/listed data (columns may not exist if migration not run)
+    try {
+      const { data: dsReport } = await supabase
+        .from('reports')
+        .select('conservation_area, listed_building_grade')
+        .eq('id', id)
+        .single();
+
+      if (dsReport?.conservation_area) {
+        assumptionsText += `\n\n3.1.${noteNum}. Conservation Area - The property is located within a designated Conservation Area. This may restrict permitted development rights and alterations to the external appearance of the property.`;
+        noteNum++;
+      }
+
+      if (dsReport?.listed_building_grade) {
+        assumptionsText += `\n\n3.1.${noteNum}. Listed Building - The property is a Grade ${dsReport.listed_building_grade} Listed Building. Listed Building Consent would be required for any works that affect the character or appearance of the building, both internally and externally.`;
+        noteNum++;
+      }
+    } catch {
+      console.warn('[generate] conservation_area/listed_building columns not available, skipping');
     }
 
     // Fill template placeholders
@@ -509,10 +719,26 @@ function mapPropertyTypeToLRCode(
 }
 
 function extractRoadName(address: string): string {
+  const roadPattern = /\b(road|street|lane|drive|avenue|close|way|place|crescent|gardens|terrace|court|hill|grove|park|rise|mews|square|walk)\b/i;
   const parts = address.split(',');
+
+  // Try each part until we find one that looks like a road name
+  for (const part of parts) {
+    const cleaned = part.trim()
+      .replace(/^(flat|apartment|unit|room)\s+\d+\w?\s*/i, '')
+      .replace(/^\d+[a-z]?\s*/i, '')
+      .trim();
+    if (cleaned && roadPattern.test(cleaned)) {
+      return cleaned;
+    }
+  }
+
+  // Fallback: strip flat prefix and house number from first part
   const firstPart = (parts[0] ?? '').trim();
-  // Remove leading house number
-  return firstPart.replace(/^\d+[a-z]?\s*/i, '').trim() || firstPart;
+  return firstPart
+    .replace(/^(flat|apartment|unit)\s+\d+\w?,?\s*/i, '')
+    .replace(/^\d+[a-z]?\s*/i, '')
+    .trim() || firstPart;
 }
 
 function formatDate(dateStr: string): string {
@@ -543,7 +769,9 @@ function formatMonthYear(dateStr: string): string {
 }
 
 function numberToWords(n: number): string {
+  if (n < 0) return 'Negative ' + numberToWords(-n);
   if (n === 0) return 'Zero Pounds';
+  if (n >= 1_000_000_000) return 'Over One Billion Pounds';
 
   const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
     'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen',

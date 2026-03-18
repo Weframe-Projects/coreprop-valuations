@@ -83,7 +83,7 @@ export default function ValuationPanel({
         <p className="text-sm text-gray-500">{address}</p>
       </div>
 
-      <div className="mt-6 grid gap-8 lg:grid-cols-[1fr,320px]">
+      <div className="mt-6 grid gap-6 sm:gap-8 md:grid-cols-[1fr,280px] lg:grid-cols-[1fr,320px]">
         <div className="space-y-6">
           {/* Market Value */}
           <div>

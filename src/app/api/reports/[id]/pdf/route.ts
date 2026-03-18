@@ -1,7 +1,13 @@
+// Vercel serverless: allow up to 120s for PDF generation (3 Puppeteer renders + merge)
+export const maxDuration = 120;
+
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generatePDF, type GeneratePDFInput } from '@/lib/pdf-generator';
-import { getReportTemplate, fillTemplate } from '@/lib/report-templates';
+import { syncReportFile } from '@/lib/google-drive';
+import { getDirectStreetViewUrl, getDirectSatelliteUrl, getDirectLocationMapUrl } from '@/lib/google-maps';
+import { getReportTemplate } from '@/lib/report-templates';
+import type { ReportPhoto } from '@/lib/pdf-template';
 import type {
   ReportRow,
   PropertyDetails,
@@ -10,7 +16,6 @@ import type {
   UserSettings,
   Comparable,
 } from '@/lib/types';
-import { isAuctionType } from '@/lib/types';
 
 // POST /api/reports/[id]/pdf
 // Generates a PDF from the stored report data and returns the binary.
@@ -66,6 +71,7 @@ export async function POST(
         firmRicsNumber: settingsRow.firm_rics_number,
         firmEmail: settingsRow.firm_email,
         firmPhone: settingsRow.firm_phone,
+        termsAndConditions: settingsRow.terms_and_conditions || '',
       }
     : null;
 
@@ -149,8 +155,24 @@ export async function POST(
   };
 
   // Use the generated_sections directly (they were already filled during generation)
-  // but for template sections (1-4, 16+) we re-fill from the template with current variables
   const generatedSections = row.generated_sections || {};
+
+  // Load report photos from report_photos table
+  const { data: photoRows } = await supabase
+    .from('report_photos')
+    .select('label, storage_path')
+    .eq('report_id', id)
+    .order('sort_order', { ascending: true });
+
+  const reportPhotos: ReportPhoto[] = (photoRows || []).map((p: { label: string; storage_path: string }) => {
+    const { data: urlData } = supabase.storage
+      .from('report-photos')
+      .getPublicUrl(p.storage_path);
+    return {
+      label: p.label,
+      url: urlData.publicUrl,
+    };
+  });
 
   // Build PDF input
   const pdfInput: GeneratePDFInput = {
@@ -159,30 +181,69 @@ export async function POST(
     templateSections: template,
     comparables: (row.comparables || []) as Comparable[],
     clientDetails,
-    propertyDetails: fullDetails,
-    googleMapsData: (row.google_maps_data || null) as GoogleMapsData | null,
+    propertyDetails: fullDetails as unknown as { [key: string]: unknown },
+    googleMapsData: (() => {
+      const gmd = (row.google_maps_data || null) as GoogleMapsData | null;
+      if (!gmd) return null;
+      // Replace proxy URLs with direct Google Maps Static API URLs for reliable PDF rendering
+      // (Puppeteer may not be able to reach localhost proxy)
+      const addr = row.property_address || '';
+      return {
+        ...gmd,
+        streetViewUrl: gmd.lat ? getDirectStreetViewUrl(addr) : gmd.streetViewUrl,
+        satelliteUrl: gmd.lat ? getDirectSatelliteUrl(gmd.lat, gmd.lng) : gmd.satelliteUrl,
+        locationMapUrl: gmd.lat ? getDirectLocationMapUrl(gmd.lat, gmd.lng) : gmd.locationMapUrl,
+      };
+    })(),
     valuationFigure: row.valuation_figure,
     valuationFigureWords: row.valuation_figure_words || '',
     auctionReserve: row.auction_reserve ?? undefined,
     auctionReserveWords: row.auction_reserve_words || undefined,
     variables,
+    reportPhotos,
+    firmSettings: settings ? {
+      phone: settings.firmPhone,
+      email: settings.firmEmail,
+    } : undefined,
   };
 
   try {
     const pdfBuffer = await generatePDF(pdfInput);
 
+    const fileName = `CoreProp-${row.postcode.replace(/\s/g, '')}-${row.reference_number || id.slice(0, 8)}.pdf`;
+
+    // Auto-upload to Google Drive if folder is linked (non-blocking)
+    // Falls back to property_details.driveFolderId for deployments without v2 migration
+    const driveFolderId = (
+      (row as unknown as Record<string, unknown>).google_drive_folder_id ||
+      ((row.property_details as Record<string, unknown> | null)?.driveFolderId)
+    ) as string | undefined;
+    if (driveFolderId && user) {
+      syncReportFile({
+        supabase,
+        userId: user.id,
+        reportFolderId: driveFolderId,
+        fileName,
+        buffer: pdfBuffer,
+        mimeType: 'application/pdf',
+      }).catch((err) => console.error('[pdf] Drive upload failed (non-blocking):', err));
+    }
+
     return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="CoreProp-${row.postcode.replace(/\s/g, '')}-${row.reference_number || id.slice(0, 8)}.pdf"`,
+        'Content-Disposition': `attachment; filename="${fileName}"`,
         'Content-Length': String(pdfBuffer.length),
       },
     });
   } catch (error) {
-    console.error('[pdf] Generation failed:', error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const errStack = error instanceof Error ? error.stack : '';
+    console.error('[pdf] Generation failed:', errMsg);
+    if (errStack) console.error('[pdf] Stack:', errStack);
     return NextResponse.json(
-      { error: 'PDF generation failed. Please try again.' },
+      { error: `PDF generation failed: ${errMsg}` },
       { status: 500 }
     );
   }

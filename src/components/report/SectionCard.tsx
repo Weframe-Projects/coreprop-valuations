@@ -1,12 +1,31 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import VoiceInputButton from '@/components/ui/VoiceInputButton';
 
 interface SectionCardProps {
   sectionKey: string;
   title: string;
   text: string;
   onSave: (key: string, value: string) => void;
+}
+
+/** Render text with [bracketed placeholders] highlighted in bright red */
+function renderHighlightedText(content: string) {
+  const parts = content.split(/(\[[^\]]+\])/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('[') && part.endsWith(']')) {
+      return (
+        <span
+          key={i}
+          className="bg-red-100 text-red-600 font-semibold px-0.5 rounded"
+        >
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
 }
 
 export default function SectionCard({ sectionKey, title, text, onSave }: SectionCardProps) {
@@ -28,9 +47,13 @@ export default function SectionCard({ sectionKey, title, text, onSave }: Section
     setIsEditing(false);
   };
 
+  const handleVoiceTranscript = useCallback((transcript: string) => {
+    setEditText((prev) => (prev ? `${prev} ${transcript}` : transcript));
+  }, []);
+
   return (
     <div className="rounded-lg border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md">
-      <div className="flex items-center justify-between border-b border-gray-100 px-6 py-3">
+      <div className="flex items-center justify-between border-b border-gray-100 px-4 sm:px-6 py-3">
         <button
           type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
@@ -59,16 +82,16 @@ export default function SectionCard({ sectionKey, title, text, onSave }: Section
       </div>
 
       {!isCollapsed && (
-        <div className="px-6 py-4">
+        <div className="px-4 sm:px-6 py-4">
           {isEditing ? (
             <div className="space-y-3">
               <textarea
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
-                rows={10}
+                rows={6}
                 className="w-full resize-y rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm leading-relaxed text-gray-900 focus:border-[#c49a6c] focus:outline-none focus:ring-2 focus:ring-[#c49a6c]/20"
               />
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleSave}
@@ -83,11 +106,12 @@ export default function SectionCard({ sectionKey, title, text, onSave }: Section
                 >
                   Cancel
                 </button>
+                <VoiceInputButton onTranscript={handleVoiceTranscript} />
               </div>
             </div>
           ) : (
             <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
-              {text || <span className="italic text-gray-400">No content generated for this section.</span>}
+              {text ? renderHighlightedText(text) : <span className="italic text-gray-400">No content generated for this section.</span>}
             </div>
           )}
         </div>
