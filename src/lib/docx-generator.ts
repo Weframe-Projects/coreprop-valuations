@@ -900,62 +900,101 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
       new TextRun({ text: 'Group', font: FONT, size: 16, color: GOLD }),
     );
   }
+  // Dark navy background on logo + text row (matching PDF header banner)
   headerRow1Children.push(
     new TextRun({ text: '\t', font: FONT }),
-    new TextRun({ text: 'Chartered Surveyors', font: FONT, size: 18, bold: true, color: NAVY }),
+    new TextRun({ text: 'Chartered Surveyors', font: FONT, size: FONT_SIZE, bold: true, color: 'FFFFFF' }),
   );
 
   headerChildren.push(
+    // Row 1: Logo + Chartered Surveyors (dark navy background)
     new Paragraph({
       spacing: { after: 0 },
+      shading: { type: ShadingType.SOLID, fill: NAVY, color: NAVY },
       children: headerRow1Children,
       tabStops: [
         { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
       ],
     }),
+    // Row 2: Specialist Valuers (dark navy background)
     new Paragraph({
-      spacing: { after: 80 },
+      spacing: { after: 200 },
+      shading: { type: ShadingType.SOLID, fill: NAVY, color: NAVY },
       children: [
         new TextRun({ text: '\t', font: FONT }),
-        new TextRun({ text: 'Specialist Valuers \u2013 Regulated by RICS', font: FONT, size: 15, color: GREY }),
+        new TextRun({ text: 'Specialist Valuers \u2013 Regulated by RICS', font: FONT, size: 16, color: 'C0C0C0' }),
       ],
       tabStops: [
         { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
       ],
     }),
+    // Spacer paragraph for gap between header banner and address
+    new Paragraph({ spacing: { after: 120 }, children: [] }),
+    // Property address bar with bottom border
     new Paragraph({
-      spacing: { after: 40 },
+      spacing: { after: 200 },
       border: {
-        bottom: { style: BorderStyle.SINGLE, size: 3, color: NAVY, space: 4 },
+        bottom: { style: BorderStyle.SINGLE, size: 3, color: NAVY, space: 6 },
       },
       children: [
-        new TextRun({ text: propertyAddress, font: FONT, size: 18, color: GOLD }),
+        new TextRun({ text: propertyAddress, font: FONT, size: 20, color: '996E45' }),
       ],
     }),
   );
 
-  // Footer children: contact info left, address middle, RICS logo right
-  const footerRow1Children: (TextRun | ImageRun)[] = [
-    new TextRun({ text: `p: ${data.firmSettings?.phone || '+44 (0)20 8050 5060'}`, font: FONT, size: 14, color: GREY }),
-    new TextRun({ text: '\t', font: FONT }),
-    new TextRun({ text: 'First Floor,', font: FONT, size: 14, color: GREY }),
-    new TextRun({ text: '\t', font: FONT }),
-  ];
-  const footerRow2Children: (TextRun | ImageRun)[] = [
-    new TextRun({ text: `e: ${data.firmSettings?.email || 'info@coreprop.co.uk'}`, font: FONT, size: 14, color: GREY }),
-    new TextRun({ text: '\t', font: FONT }),
-    new TextRun({ text: '4 Pentonville Road,', font: FONT, size: 14, color: GREY }),
-  ];
-  const footerRow3Children: (TextRun | ImageRun)[] = [
-    new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 14, color: GREY }),
-    new TextRun({ text: '\t', font: FONT }),
-    new TextRun({ text: 'London, N1 9HF', font: FONT, size: 14, color: GREY }),
+  // Footer: divider line, then contact + address + RICS logo below
+  const footerChildren: Paragraph[] = [
+    // Divider line
+    new Paragraph({
+      spacing: { before: 200, after: 80 },
+      border: {
+        top: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 4 },
+      },
+      children: [],
+    }),
+    // Row 1: phone + address col 1
+    new Paragraph({
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: `p: ${data.firmSettings?.phone || '+44 (0)20 8050 5060'}`, font: FONT, size: 15, color: GREY }),
+        new TextRun({ text: '\t', font: FONT }),
+        new TextRun({ text: 'First Floor,', font: FONT, size: 15, color: GREY }),
+      ],
+      tabStops: [
+        { type: TabStopType.CENTER, position: Math.round(TabStopPosition.MAX / 2) },
+      ],
+    }),
+    // Row 2: email + address col 2
+    new Paragraph({
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: `e: ${data.firmSettings?.email || 'info@coreprop.co.uk'}`, font: FONT, size: 15, color: GREY }),
+        new TextRun({ text: '\t', font: FONT }),
+        new TextRun({ text: '4 Pentonville Road,', font: FONT, size: 15, color: GREY }),
+      ],
+      tabStops: [
+        { type: TabStopType.CENTER, position: Math.round(TabStopPosition.MAX / 2) },
+      ],
+    }),
+    // Row 3: website + address col 3
+    new Paragraph({
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 15, color: GREY }),
+        new TextRun({ text: '\t', font: FONT }),
+        new TextRun({ text: 'London, N1 9HF', font: FONT, size: 15, color: GREY }),
+      ],
+      tabStops: [
+        { type: TabStopType.CENTER, position: Math.round(TabStopPosition.MAX / 2) },
+      ],
+    }),
   ];
 
-  // RICS logo in footer (right side of first row)
+  // RICS logo below the contact info, right-aligned
   if (ricsLogoBuf) {
-    // Original: 1536x614 (2.50:1 ratio) → 80px wide, 32px tall
-    footerRow1Children.push(
+    footerChildren[1].addChildElement(new TextRun({ text: '\t', font: FONT }));
+    // Add RICS logo floating right on the first contact row
+    footerChildren[1].addChildElement(
       new ImageRun({
         data: ricsLogoBuf,
         transformation: { width: 80, height: 32 },
@@ -969,41 +1008,13 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     );
   }
 
-  const footerChildren: Paragraph[] = [
-    new Paragraph({
-      spacing: { after: 0 },
-      border: {
-        top: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 4 },
-      },
-      children: footerRow1Children,
-      tabStops: [
-        { type: TabStopType.CENTER, position: Math.round(TabStopPosition.MAX / 2) },
-        { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 0 },
-      children: footerRow2Children,
-      tabStops: [
-        { type: TabStopType.CENTER, position: Math.round(TabStopPosition.MAX / 2) },
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 0 },
-      children: footerRow3Children,
-      tabStops: [
-        { type: TabStopType.CENTER, position: Math.round(TabStopPosition.MAX / 2) },
-      ],
-    }),
-  ];
-
   const pageSize = {
     width: convertMillimetersToTwip(210),
     height: convertMillimetersToTwip(297),
   };
   const pageMargins = {
-    top: convertMillimetersToTwip(20),
-    bottom: convertMillimetersToTwip(22),
+    top: convertMillimetersToTwip(35),
+    bottom: convertMillimetersToTwip(30),
     left: convertMillimetersToTwip(25),
     right: convertMillimetersToTwip(25),
   };
