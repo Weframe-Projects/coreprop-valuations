@@ -163,6 +163,7 @@ export default function InspectionWizard() {
     dateOfDeath: '',
     auctionCompany: '',
   });
+  const [assignedTo, setAssignedTo] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -279,6 +280,7 @@ export default function InspectionWizard() {
     if (!data.address) errors.push('Property address is required');
     if (!data.postcode) errors.push('Postcode is required');
     if (!data.reportType) errors.push('Report type is required');
+    if (!assignedTo) errors.push('Assigned surveyor is required');
     if (!data.clientName) errors.push('Client name is required');
     if (isIHTType(data.reportType)) {
       if (!data.deceasedName) errors.push('Deceased name is required for IHT reports');
@@ -375,6 +377,7 @@ export default function InspectionWizard() {
           report_type: data.reportType,
           reference_number: referenceNumber,
           land_registry_title: data.titleNumber,
+          ...(assignedTo && { assigned_to: assignedTo }),
           ...(driveFolderId && { google_drive_folder_id: driveFolderId }),
           property_details: {
             ...(driveFolderId && { driveFolderId, driveFolderName }),
@@ -618,6 +621,18 @@ export default function InspectionWizard() {
 
       {/* ===== CLIENT DETAILS ===== */}
       <Section title="Client Details" defaultOpen={true} required>
+        <Field label="Assigned To" required>
+          <select
+            value={assignedTo}
+            onChange={(e) => setAssignedTo(e.target.value)}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#c49a6c] focus:border-transparent outline-none text-gray-900 text-sm bg-white"
+          >
+            <option value="">Select surveyor...</option>
+            <option value="Eddie Lisberg">Eddie Lisberg</option>
+            <option value="Dylan Goldstein">Dylan Goldstein</option>
+          </select>
+        </Field>
+
         <Field label="Client Name" required>
           <input
             type="text"
