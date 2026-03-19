@@ -216,7 +216,11 @@ function buildComparableTable(comparables: Comparable[]): string {
     const statusLabel = comp.status === 'SOLD' ? 'SOLD' : escapeHTML(comp.status);
     const dateLabel = formatDate(comp.saleDate);
 
-    const floorAreaText = comp.floorArea
+    // AI descriptions already include floor area — don't duplicate it
+    const descAlreadyHasArea = comp.description && comp.floorArea &&
+      comp.description.toLowerCase().includes(`${comp.floorArea}m`);
+
+    const floorAreaText = (!descAlreadyHasArea && comp.floorArea)
       ? `${comp.floorArea}m\u00B2 (${comp.floorAreaSource === 'epc' ? 'EPC' : comp.floorAreaSource === 'agent_floorplan' ? 'agent floorplan' : 'estimated'})`
       : '';
 
@@ -283,7 +287,11 @@ function buildComparableCard(comp: Comparable): string {
   const statusLabel = comp.status === 'SOLD' ? 'Sold' : escapeHTML(comp.status);
   const dateLabel = formatDate(comp.saleDate);
 
-  const floorAreaText = comp.floorArea
+  // AI descriptions already include floor area — don't duplicate it
+  const descAlreadyHasArea2 = comp.description && comp.floorArea &&
+    comp.description.toLowerCase().includes(`${comp.floorArea}m`);
+
+  const floorAreaText = (!descAlreadyHasArea2 && comp.floorArea)
     ? `${comp.floorArea}m² (${comp.floorAreaSource === 'epc' ? 'EPC' : comp.floorAreaSource === 'agent_floorplan' ? 'agent floorplan' : 'estimated'})`
     : '';
 

@@ -166,7 +166,7 @@ function makePhotoSection(
             text: `[${altText} - image not available]`,
             italics: true,
             font: FONT,
-            size: 19,
+            size: FONT_SIZE,
             color: '999999',
           }),
         ],
@@ -230,7 +230,7 @@ function buildComparableTable(comparables: Comparable[]): (Paragraph | Table)[] 
                   text,
                   bold: true,
                   color: 'ffffff',
-                  size: 18,
+                  size: FONT_SIZE,
                   font: FONT,
                 }),
               ],
@@ -245,7 +245,11 @@ function buildComparableTable(comparables: Comparable[]): (Paragraph | Table)[] 
       ? `SOLD  ${formatDate(comp.saleDate)}`
       : `${comp.status}  ${formatDate(comp.saleDate)}`;
 
-    const floorAreaText = comp.floorArea
+    // AI descriptions already include floor area — don't duplicate it
+    const descAlreadyHasArea = comp.description && comp.floorArea &&
+      comp.description.toLowerCase().includes(`${comp.floorArea}m`);
+
+    const floorAreaText = (!descAlreadyHasArea && comp.floorArea)
       ? `${comp.floorArea}m² (${comp.floorAreaSource === 'epc' ? 'EPC' : comp.floorAreaSource === 'agent_floorplan' ? 'agent floorplan' : 'estimated'})`
       : '';
 
@@ -272,7 +276,7 @@ function buildComparableTable(comparables: Comparable[]): (Paragraph | Table)[] 
             new Paragraph({
               alignment,
               children: [
-                new TextRun({ text: line, font: FONT, size: 19 }),
+                new TextRun({ text: line, font: FONT, size: FONT_SIZE }),
               ],
             }),
         ),
@@ -376,7 +380,7 @@ function buildSignatureBlock(
         new Paragraph({
           spacing: { after: 20 },
           children: [
-            new TextRun({ text: t, font: FONT, size: 19, color: GREY }),
+            new TextRun({ text: t, font: FONT, size: FONT_SIZE, color: GREY }),
           ],
         }),
     ),
@@ -387,7 +391,7 @@ function buildSignatureBlock(
         new TextRun({
           text: `Date of Report: ${valuationDate}`,
           font: FONT,
-          size: 19,
+          size: FONT_SIZE,
           color: GREY,
         }),
       ],
@@ -821,7 +825,7 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
       new Paragraph({
         spacing: { after: 120 },
         children: [
-          new TextRun({ text: p, font: FONT, size: 19 }),
+          new TextRun({ text: p, font: FONT, size: FONT_SIZE }),
         ],
       }),
     );
