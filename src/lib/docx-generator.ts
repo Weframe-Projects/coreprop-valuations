@@ -545,8 +545,8 @@ function buildCoverPage(data: {
 
   // Wrap everything in a single full-page table with navy cell shading
   const fullPageWidth = convertMillimetersToTwip(210);
-  // Row height: page height minus cell top/bottom margins to fit exactly on one page
-  const coverRowHeight = convertMillimetersToTwip(297 - 15 - 10);
+  // Row height: full page height — EXACT rule caps the row so it won't overflow
+  const coverRowHeight = convertMillimetersToTwip(297);
   const noCellBorders = {
     top: { style: BorderStyle.NONE, size: 0, color: NAVY },
     bottom: { style: BorderStyle.NONE, size: 0, color: NAVY },
