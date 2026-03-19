@@ -57,15 +57,23 @@ function absoluteImageUrls(html: string, baseUrl: string): string {
  * On Vercel/AWS Lambda: uses puppeteer-core + @sparticuz/chromium
  * Locally: uses full puppeteer with its bundled Chromium
  */
+/**
+ * Chromium binary URL for @sparticuz/chromium-min on serverless.
+ * Must match the major version of @sparticuz/chromium-min in package.json.
+ */
+const CHROMIUM_PACK_URL =
+  'https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar';
+
 async function launchBrowser() {
   const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
   if (isServerless) {
-    const chromium = (await import('@sparticuz/chromium')).default;
+    const chromium = (await import('@sparticuz/chromium-min')).default;
     const puppeteerCore = await import('puppeteer-core');
+
     return puppeteerCore.default.launch({
       args: chromium.args,
-      executablePath: await chromium.executablePath(),
+      executablePath: await chromium.executablePath(CHROMIUM_PACK_URL),
       headless: true,
     });
   } else {
