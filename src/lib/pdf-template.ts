@@ -236,10 +236,11 @@ function buildComparableTable(comparables: Comparable[]): string {
 
     const adjustmentNote = (comp as Comparable & { adjustmentNotes?: string }).adjustmentNotes;
 
-    // Street View thumbnail for the comparable
-    const streetViewUrl = getDirectStreetViewUrl(comp.address, '200x120');
+    // Street View thumbnail: request taller image (200x160) and crop to 100x60
+    // using object-position: center top to cut off the Google watermark at the bottom
+    const streetViewUrl = getDirectStreetViewUrl(comp.address, '200x160');
     const streetViewImg = streetViewUrl
-      ? `<img src="${streetViewUrl}" alt="" style="width: 100px; height: 60px; object-fit: cover; margin-bottom: 4px; display: block; border-radius: 2px;" onerror="this.style.display='none'" />`
+      ? `<img src="${streetViewUrl}" alt="" style="width: 100px; height: 60px; object-fit: cover; object-position: center top; margin-bottom: 4px; display: block; border-radius: 2px; overflow: hidden;" onerror="this.style.display='none'" />`
       : '';
 
     return `
@@ -607,8 +608,9 @@ function getContentStyles(): string {
     }
 
     /* --- Content area (left/right padding for margins) --- */
+    /* Top: gap below repeating header; Bottom: must clear the fixed footer */
     .content-area {
-      padding: 14mm 25.4mm 46mm;
+      padding: 18mm 25.4mm 54mm;
     }
 
     /* --- Section headings --- */

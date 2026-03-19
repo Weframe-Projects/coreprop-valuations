@@ -128,7 +128,7 @@ export async function getLocationMapUrl(
 export function getDirectStreetViewUrl(address: string, size: string = '800x600'): string {
   const key = process.env.GOOGLE_MAPS_API_KEY;
   if (!key) return '';
-  return `https://maps.googleapis.com/maps/api/streetview?size=${size}&location=${encodeURIComponent(address)}&key=${key}`;
+  return `https://maps.googleapis.com/maps/api/streetview?size=${size}&location=${encodeURIComponent(address)}&source=outdoor&fov=90&key=${key}`;
 }
 
 export function getDirectSatelliteUrl(lat: number, lng: number, zoom: number = 19, size: string = '800x600'): string {
