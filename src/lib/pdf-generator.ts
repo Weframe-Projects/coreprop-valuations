@@ -143,7 +143,7 @@ export async function generatePDF(data: GeneratePDFInput): Promise<Buffer> {
       format: 'A4',
       printBackground: true,
       displayHeaderFooter: false,
-      margin: { top: '0mm', bottom: '16mm', left: '0mm', right: '0mm' },
+      margin: { top: '0mm', bottom: '0mm', left: '0mm', right: '0mm' },
     });
 
     // --------------------------------------------------

@@ -20,7 +20,7 @@ import { isAuctionType, isIHTType } from '@/lib/types';
 import type { ReportTemplate } from '@/lib/report-templates';
 import { fillTemplate } from '@/lib/report-templates';
 import { format, parseISO } from 'date-fns';
-import { getCorepropLogoDataUrl, getRicsLogoDataUrl, getRicsLogoWhiteDataUrl } from '@/lib/logo-data';
+import { getCorepropLogoDataUrl, getRicsLogoDataUrl, getRicsLogoWhiteDataUrl, getRicsLogoGoldDataUrl } from '@/lib/logo-data';
 import { getDirectStreetViewUrl } from '@/lib/google-maps';
 
 // --- Report Photo type (from report_photos table) ---
@@ -256,11 +256,11 @@ function buildComparableTable(comparables: Comparable[]): string {
   return `
     <table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-family: Arial, sans-serif;">
       <thead>
-        <tr style="background: #1a2e3b;">
-          <th style="padding: 8px 10px; border: 1px solid #1a2e3b; color: white; font-size: 9.5pt; text-align: left;">Date</th>
-          <th style="padding: 8px 10px; border: 1px solid #1a2e3b; color: white; font-size: 9.5pt; text-align: left;">Address</th>
-          <th style="padding: 8px 10px; border: 1px solid #1a2e3b; color: white; font-size: 9.5pt; text-align: left;">Type</th>
-          <th style="padding: 8px 10px; border: 1px solid #1a2e3b; color: white; font-size: 9.5pt; text-align: right;">Sale Price</th>
+        <tr style="background: #B5DEE8;">
+          <th style="padding: 8px 10px; border: 1px solid #ddd; color: #000000; font-size: 9.5pt; text-align: left;">Date</th>
+          <th style="padding: 8px 10px; border: 1px solid #ddd; color: #000000; font-size: 9.5pt; text-align: left;">Address</th>
+          <th style="padding: 8px 10px; border: 1px solid #ddd; color: #000000; font-size: 9.5pt; text-align: left;">Type</th>
+          <th style="padding: 8px 10px; border: 1px solid #ddd; color: #000000; font-size: 9.5pt; text-align: right;">Sale Price</th>
         </tr>
       </thead>
       <tbody>
@@ -505,7 +505,7 @@ function getContentStyles(): string {
       font-family: Arial, Helvetica, sans-serif;
       font-size: 10.5pt;
       line-height: 1.6;
-      color: #2c2c2c;
+      color: #000000;
       background: #fff;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
@@ -527,29 +527,14 @@ function getContentStyles(): string {
     }
     .header-banner {
       background: #1a2e3b;
-      padding: 10px 25mm 8px;
+      min-height: 32mm;
+      padding: 6mm 25.4mm;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .header-brand { }
-    .header-brand img { height: 38px; }
-    .header-brand .h-the { color: #8b7355; font-size: 9pt; font-family: 'Times New Roman', Georgia, serif; }
-    .header-brand .h-name { color: #ffffff; font-size: 14pt; font-weight: 700; font-family: 'Times New Roman', Georgia, serif; }
-    .header-brand .h-group { color: #8b7355; font-size: 9pt; font-family: 'Times New Roman', Georgia, serif; }
-    .header-right { text-align: right; }
-    .header-right .h-cs { color: #ffffff; font-size: 9.5pt; font-weight: 700; }
-    .header-right .h-sv { color: #c0c0c0; font-size: 7pt; margin-top: 1px; }
-    .header-address-bar {
-      padding: 0 25mm;
-      border-top: 2px solid #1a2e3b;
-    }
-    .header-address-bar .h-addr {
-      font-size: 8.5pt;
-      color: #8b7355;
-      padding: 5px 0 4px;
-      border-bottom: 1px solid #1a2e3b;
-    }
+    .header-brand img { height: 22mm; }
+    .header-rics img { height: 17mm; width: auto; }
 
     /* Footer uses position:fixed to repeat on every printed page */
     .fixed-footer {
@@ -560,28 +545,13 @@ function getContentStyles(): string {
       z-index: 100;
     }
     .footer-bar {
-      border-top: 1px solid #1a2e3b;
-      margin: 0 25mm;
-      padding: 5px 0 6px;
+      margin: 0 25.4mm;
+      padding: 4mm 0;
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
       align-items: center;
     }
-    .footer-left { }
-    .footer-contact {
-      font-size: 7pt;
-      color: #666;
-    }
-    .footer-contact span { margin-right: 4px; }
-    .footer-address {
-      font-size: 7pt;
-      color: #666;
-      margin-top: 1px;
-    }
-    .footer-rics {
-      display: flex;
-      align-items: center;
-    }
+    .footer-rics img { height: 9mm; width: auto; }
 
     /* --- Page break utilities --- */
     .page-break {
@@ -597,18 +567,23 @@ function getContentStyles(): string {
 
     /* --- Content area (left/right padding for margins) --- */
     .content-area {
-      padding: 8mm 25mm 6mm;
+      padding: 10mm 25.4mm 30mm;
     }
 
     /* --- Section headings --- */
     .section-heading {
-      font-size: 11pt;
+      font-size: 10.5pt;
       font-weight: 700;
-      color: #1a2e3b;
+      color: #000000;
       margin-top: 20px;
       margin-bottom: 10px;
       page-break-after: avoid;
       break-after: avoid;
+    }
+
+    /* Accommodation section uses center alignment (matching DOCX) */
+    .accommodation-section .section-body p {
+      text-align: center;
     }
 
     .section-body p {
@@ -1189,35 +1164,18 @@ export function buildContentHTML(data: {
   const headerHTML = `
     <div class="header-banner">
       <div class="header-brand">
-        <img src="${getCorepropLogoDataUrl()}" alt="The CoreProp Group" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" />
-        <div style="display:none; line-height:1.05;">
-          <span class="h-the">The</span><br/>
-          <span class="h-name">CoreProp</span><br/>
-          <span class="h-group">Group</span>
-        </div>
+        <img src="${getCorepropLogoDataUrl()}" alt="The CoreProp Group" />
       </div>
-      <div class="header-right">
-        <div class="h-cs">Chartered Surveyors</div>
-        <div class="h-sv">Specialist Valuers &ndash; Regulated by RICS</div>
+      <div class="header-rics">
+        <img src="${getRicsLogoWhiteDataUrl()}" alt="Regulated by RICS" />
       </div>
-    </div>
-    <div class="header-address-bar">
-      <div class="h-addr">${escapeHTML(propertyAddress)}</div>
     </div>`;
 
-  // --- Build the repeating footer HTML (appears in <tfoot>) ---
+  // --- Build the repeating footer HTML (appears as fixed div) ---
   const footerHTML = `
     <div class="footer-bar">
-      <div class="footer-left">
-        <div class="footer-contact">
-          <span>p: ${escapeHTML(firmPhone)}</span>&nbsp;&nbsp;
-          <span>e: ${escapeHTML(firmEmail)}</span>&nbsp;&nbsp;
-          <span>w: www.coreprop.co.uk</span>
-        </div>
-        <div class="footer-address">${escapeHTML(firmAddress)}</div>
-      </div>
       <div class="footer-rics">
-        <img src="${getRicsLogoDataUrl()}" alt="RICS Regulated" style="height: 30px;" onerror="this.outerHTML='<span style=\\'font-weight:600;color:#1a2e3b;font-size:8pt;\\'>RICS Regulated</span>'" />
+        <img src="${getRicsLogoGoldDataUrl()}" alt="Regulated by RICS" />
       </div>
     </div>`;
 
@@ -1227,27 +1185,19 @@ export function buildContentHTML(data: {
   }
 
   // --- Assemble all content sections ---
+  // Sections 1-15 flow naturally without forced page breaks.
+  // Breaks only before TOC end, section 16, section 17, and appendix.
   const allContent = `
     <!-- TOC -->
     ${tocHTML}
     <div class="page-break"></div>
 
-    <!-- SECTIONS 1-2 -->
+    <!-- SECTIONS 1-15 (natural flow) -->
     <div class="content-area">
       ${buildNumberedSection(1, 'Instructions', templateSections.instructions, variables)}
       ${buildNumberedSection(2, 'Basis of Valuation', templateSections.basisOfValuation, variables)}
-    </div>
-    <div class="page-break"></div>
-
-    <!-- SECTION 3 + Location Map -->
-    <div class="content-area">
       ${buildNumberedSection(3, 'Assumptions and Sources of Information', templateSections.assumptionsAndSources, variables)}
       ${locationMapHTML}
-    </div>
-    <div class="page-break"></div>
-
-    <!-- SECTIONS 4-6 + Front Photo -->
-    <div class="content-area">
       ${buildNumberedSection(4, 'Inspection', templateSections.inspection, variables)}
       ${buildNumberedSection(5, 'Description of Property', sections['section_5_description'] ?? '', variables)}
       ${buildNumberedSection(6, 'Construction', sections['section_6_construction'] ?? '', variables)}
@@ -1257,31 +1207,18 @@ export function buildContentHTML(data: {
           ? (() => { photoCounter++; return buildInlinePhoto(streetViewUrl, 'Front elevation of the Property', photoCounter); })()
           : buildPhotoPlaceholder('Front elevation of the Property')
       }
-    </div>
-    <div class="page-break"></div>
-
-    <!-- SECTIONS 7-8 + Photos -->
-    <div class="content-area">
-      ${buildNumberedSection(7, 'Accommodation', sections['section_7_accommodation'] ?? '', variables)}
+      <div class="accommodation-section">
+        ${buildNumberedSection(7, 'Accommodation', sections['section_7_accommodation'] ?? '', variables)}
+      </div>
       ${floorPlanPhotos.length > 0 ? renderPhotos(floorPlanPhotos) : ''}
       ${buildNumberedSection(8, 'Externally', sections['section_8_externally'] ?? '', variables)}
       ${renderPhotos(exteriorPhotos)}
       ${renderPhotos(gardenPhotos)}
-    </div>
-    <div class="page-break"></div>
-
-    <!-- SECTIONS 9-12 + EPC Card -->
-    <div class="content-area">
       ${buildNumberedSection(9, 'Services', sections['section_9_services'] ?? '', variables)}
       ${epcCardHTML}
       ${buildNumberedSection(10, floorAreaTitle, sections['section_10_floor_area'] ?? '', variables)}
       ${buildNumberedSection(11, 'Tenure', sections['section_11_tenure'] ?? '', variables)}
       ${buildNumberedSection(12, 'Roads', sections['section_12_roads'] ?? '', variables)}
-    </div>
-    <div class="page-break"></div>
-
-    <!-- SECTIONS 13-15 + Photos -->
-    <div class="content-area">
       ${buildNumberedSection(13, 'Condition & Further Details', sections['section_13_condition'] ?? '', variables)}
       ${renderPhotos(kitchenPhotos)}
       ${renderPhotos(bathroomPhotos)}
