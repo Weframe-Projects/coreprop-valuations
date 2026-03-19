@@ -442,16 +442,19 @@ function buildCoverPage(data: {
 
   const elements: Paragraph[] = [];
 
+  // Dark navy shading applied to every paragraph on the cover
+  const navyShading = { type: ShadingType.SOLID, fill: NAVY, color: NAVY } as const;
+
   // Spacing at top
-  elements.push(new Paragraph({ spacing: { after: 1600 }, children: [] }));
+  elements.push(new Paragraph({ spacing: { after: 1600 }, shading: navyShading, children: [new TextRun({ text: ' ', font: FONT, size: 4, color: NAVY })] }));
 
   // Brand logo (actual image, not text)
   const coverLogoBuf = getCorepropLogoBuffer();
   if (coverLogoBuf) {
-    // Original: 1831x1343 → scale to ~180px wide, maintain 1.36:1 ratio
     elements.push(
       new Paragraph({
         spacing: { after: 600 },
+        shading: navyShading,
         children: [
           new ImageRun({
             data: coverLogoBuf,
@@ -462,68 +465,57 @@ function buildCoverPage(data: {
       }),
     );
   } else {
-    // Fallback to text if image can't load
     elements.push(
-      new Paragraph({
-        children: [
-          new TextRun({ text: 'The', font: FONT, size: 36, color: GOLD }),
-        ],
-      }),
-      new Paragraph({
-        children: [
-          new TextRun({ text: 'CoreProp', font: FONT, size: 56, bold: true, color: NAVY }),
-        ],
-      }),
-      new Paragraph({
-        spacing: { after: 600 },
-        children: [
-          new TextRun({ text: 'Group', font: FONT, size: 36, color: GOLD }),
-        ],
-      }),
+      new Paragraph({ shading: navyShading, children: [new TextRun({ text: 'The', font: FONT, size: 36, color: GOLD })] }),
+      new Paragraph({ shading: navyShading, children: [new TextRun({ text: 'CoreProp', font: FONT, size: 56, bold: true, color: 'FFFFFF' })] }),
+      new Paragraph({ spacing: { after: 600 }, shading: navyShading, children: [new TextRun({ text: 'Group', font: FONT, size: 36, color: GOLD })] }),
     );
   }
 
-  // Report type
+  // Report type (white on dark navy)
   elements.push(
     new Paragraph({
       spacing: { after: 600 },
+      shading: navyShading,
       children: [
         new TextRun({
           text: reportTypeDisplay,
           font: FONT,
           size: 32,
-          color: NAVY,
+          color: 'FFFFFF',
         }),
       ],
     }),
   );
 
-  // Property address
+  // Property address (light grey on dark navy)
   elements.push(
     new Paragraph({
       spacing: { after: 80 },
+      shading: navyShading,
       children: [
         new TextRun({
           text: `Valuation advice on ${propertyAddress} ('the Property')`,
           font: FONT,
           size: 22,
-          color: GREY,
+          color: 'E0E0E0',
         }),
       ],
     }),
   );
 
-  // Client / Estate line
+  // Client / Estate line (light grey on dark navy)
   if (isIHTType(reportType) && deceasedName) {
     elements.push(
       new Paragraph({
         spacing: { after: 80 },
+        shading: navyShading,
         children: [
           new TextRun({
             text: `On behalf of the Estate of the late ${deceasedName} c/o ${clientName}`,
             font: FONT,
             size: 22,
-            color: GREY,
+            color: 'E0E0E0',
           }),
         ],
       }),
@@ -532,12 +524,13 @@ function buildCoverPage(data: {
       elements.push(
         new Paragraph({
           spacing: { after: 80 },
+          shading: navyShading,
           children: [
             new TextRun({
               text: `Date of death \u2013 ${formatDateLong(dateOfDeath)}`,
               font: FONT,
               size: 22,
-              color: GREY,
+              color: 'E0E0E0',
             }),
           ],
         }),
@@ -547,35 +540,70 @@ function buildCoverPage(data: {
     elements.push(
       new Paragraph({
         spacing: { after: 80 },
+        shading: navyShading,
         children: [
           new TextRun({
             text: `On behalf of ${clientName}`,
             font: FONT,
             size: 22,
-            color: GREY,
+            color: 'E0E0E0',
           }),
         ],
       }),
     );
   }
 
-  // Reference and date
+  // Reference and date (gold on dark navy)
   elements.push(
     new Paragraph({
       spacing: { before: 400, after: 40 },
+      shading: navyShading,
       children: [
         new TextRun({ text: `Our ref: ${referenceNumber}`, font: FONT, size: FONT_SIZE, color: GOLD }),
       ],
     }),
     new Paragraph({
       spacing: { after: 200 },
+      shading: navyShading,
       children: [
         new TextRun({ text: formatDateLong(valuationDate), font: FONT, size: FONT_SIZE, color: GOLD }),
       ],
     }),
   );
 
-  // No page break needed — section break handles this
+  // Fill remaining page with navy background spacers
+  for (let i = 0; i < 12; i++) {
+    elements.push(new Paragraph({ shading: navyShading, children: [new TextRun({ text: ' ', font: FONT, size: 4, color: NAVY })] }));
+  }
+
+  // Cover footer: contact info + RICS line at bottom
+  elements.push(
+    new Paragraph({
+      shading: navyShading,
+      border: { top: { style: BorderStyle.SINGLE, size: 1, color: '3a5a6b', space: 4 } },
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: 'p: +44 (0)20 8050 5060', font: FONT, size: 14, color: 'C0C0C0' }),
+        new TextRun({ text: '\t', font: FONT }),
+        new TextRun({ text: 'First Floor, 4 Pentonville Road, London, N1 9HF', font: FONT, size: 14, color: 'C0C0C0' }),
+      ],
+      tabStops: [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }],
+    }),
+    new Paragraph({
+      shading: navyShading,
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: 'e: info@coreprop.co.uk', font: FONT, size: 14, color: 'C0C0C0' }),
+      ],
+    }),
+    new Paragraph({
+      shading: navyShading,
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 14, color: 'C0C0C0' }),
+      ],
+    }),
+  );
 
   return elements;
 }
@@ -928,8 +956,8 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
         { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
       ],
     }),
-    // Spacer paragraph for gap between header banner and address
-    new Paragraph({ spacing: { after: 120 }, children: [] }),
+    // Spacer paragraph for gap between header banner and content
+    new Paragraph({ spacing: { after: 400 }, children: [] }),
     // Property address bar with bottom border
     new Paragraph({
       spacing: { after: 200 },
@@ -989,6 +1017,15 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
       ],
     }),
   ];
+
+  // Dark navy bottom strip (matching PDF footer)
+  footerChildren.push(
+    new Paragraph({
+      spacing: { before: 80, after: 0 },
+      shading: { type: ShadingType.SOLID, fill: NAVY, color: NAVY },
+      children: [new TextRun({ text: ' ', font: FONT, size: 4 })],
+    }),
+  );
 
   // RICS logo below the contact info, right-aligned
   if (ricsLogoBuf) {
