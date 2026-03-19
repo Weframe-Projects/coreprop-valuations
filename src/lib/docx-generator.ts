@@ -12,6 +12,7 @@ import {
   Table,
   TableRow,
   TableCell,
+  TableLayoutType,
   WidthType,
   AlignmentType,
   BorderStyle,
@@ -24,6 +25,8 @@ import {
   TabStopPosition,
   TabStopType,
   SectionType,
+  VerticalAlign,
+  HeightRule,
 } from 'docx';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -443,7 +446,8 @@ function buildCoverPage(data: {
   const elements: Paragraph[] = [];
 
   // Dark navy shading applied to every paragraph on the cover
-  const navyShading = { type: ShadingType.SOLID, fill: NAVY, color: NAVY } as const;
+  // ShadingType.CLEAR with fill = simple solid background color
+  const navyShading = { type: ShadingType.CLEAR, fill: NAVY } as const;
   // Cover uses tiny margins (5mm) so shading fills edge-to-edge.
   // Text content gets left indent of 20mm for padding from the edge.
   const coverTextIndent = convertMillimetersToTwip(20);
@@ -926,62 +930,94 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
   const corepropLogoBuf = getCorepropLogoBuffer();
   const ricsLogoBuf = getRicsLogoBuffer();
 
-  // Header children: CoreProp logo left + "Chartered Surveyors" right
-  const headerChildren: Paragraph[] = [];
+  // Header: Navy banner as a full-width TABLE (reliable full-bleed in Word)
+  // then spacer + address bar as regular paragraphs.
+  const noBorders = {
+    top: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+    bottom: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+    left: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+    right: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  };
+  const navyCellShading = { type: ShadingType.CLEAR, fill: NAVY };
+  const marginTwip = convertMillimetersToTwip(25);
+  const fullPageWidthTwip = convertMillimetersToTwip(210);
 
-  // Row 1: Logo + Chartered Surveyors
-  const headerRow1Children: (TextRun | ImageRun)[] = [];
+  // Left cell: logo
+  const logoChildren: Paragraph[] = [];
   if (corepropLogoBuf) {
-    // Original: 1831x1343 (1.36:1 ratio) → 95px wide, 70px tall
-    headerRow1Children.push(
-      new ImageRun({
-        data: corepropLogoBuf,
-        transformation: { width: 95, height: 70 },
-        type: 'png',
+    logoChildren.push(
+      new Paragraph({
+        spacing: { before: 60, after: 0 },
+        children: [
+          new ImageRun({
+            data: corepropLogoBuf,
+            transformation: { width: 95, height: 70 },
+            type: 'png',
+          }),
+        ],
       }),
     );
   } else {
-    headerRow1Children.push(
-      new TextRun({ text: 'The ', font: FONT, size: 16, color: GOLD }),
-      new TextRun({ text: 'CoreProp ', font: FONT, size: 20, bold: true, color: NAVY }),
-      new TextRun({ text: 'Group', font: FONT, size: 16, color: GOLD }),
+    logoChildren.push(
+      new Paragraph({
+        spacing: { after: 0 },
+        children: [
+          new TextRun({ text: 'The ', font: FONT, size: 16, color: GOLD }),
+          new TextRun({ text: 'CoreProp ', font: FONT, size: 20, bold: true, color: 'FFFFFF' }),
+          new TextRun({ text: 'Group', font: FONT, size: 16, color: GOLD }),
+        ],
+      }),
     );
   }
-  // Dark navy background on logo + text row (matching PDF header banner)
-  headerRow1Children.push(
-    new TextRun({ text: '\t', font: FONT }),
-    new TextRun({ text: 'Chartered Surveyors', font: FONT, size: FONT_SIZE, bold: true, color: 'FFFFFF' }),
-  );
 
-  // Negative indent to push navy shading beyond page margins to page edges
-  const headerBleed = { left: -convertMillimetersToTwip(25), right: -convertMillimetersToTwip(25) };
-  // firstLine offsets the text back to the margin position (single-line rows)
-  const headerBleedWithPad = { left: -convertMillimetersToTwip(25), right: -convertMillimetersToTwip(25), firstLine: convertMillimetersToTwip(25) };
-
-  headerChildren.push(
-    // Row 1: Logo + Chartered Surveyors (full-bleed dark navy)
+  // Right cell: Chartered Surveyors + Specialist Valuers
+  const rightTextChildren: Paragraph[] = [
     new Paragraph({
-      spacing: { after: 0 },
-      shading: { type: ShadingType.SOLID, fill: NAVY, color: NAVY },
-      indent: headerBleedWithPad,
-      children: headerRow1Children,
-      tabStops: [
-        { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
+      spacing: { before: 60, after: 0 },
+      alignment: AlignmentType.RIGHT,
+      children: [
+        new TextRun({ text: 'Chartered Surveyors', font: FONT, size: FONT_SIZE, bold: true, color: 'FFFFFF' }),
       ],
     }),
-    // Row 2: Specialist Valuers (full-bleed dark navy)
     new Paragraph({
-      spacing: { after: 200 },
-      shading: { type: ShadingType.SOLID, fill: NAVY, color: NAVY },
-      indent: headerBleed,
+      spacing: { after: 60 },
+      alignment: AlignmentType.RIGHT,
       children: [
-        new TextRun({ text: '\t', font: FONT }),
         new TextRun({ text: 'Specialist Valuers \u2013 Regulated by RICS', font: FONT, size: 16, color: 'C0C0C0' }),
       ],
-      tabStops: [
-        { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
-      ],
     }),
+  ];
+
+  const headerBannerTable = new Table({
+    width: { size: fullPageWidthTwip, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    indent: { size: -marginTwip, type: WidthType.DXA },
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            shading: navyCellShading,
+            borders: noBorders,
+            width: { size: Math.round(fullPageWidthTwip * 0.5), type: WidthType.DXA },
+            margins: { left: convertMillimetersToTwip(20), top: 60, bottom: 60 },
+            verticalAlign: VerticalAlign.CENTER,
+            children: logoChildren,
+          }),
+          new TableCell({
+            shading: navyCellShading,
+            borders: noBorders,
+            width: { size: Math.round(fullPageWidthTwip * 0.5), type: WidthType.DXA },
+            margins: { right: convertMillimetersToTwip(20), top: 60, bottom: 60 },
+            verticalAlign: VerticalAlign.CENTER,
+            children: rightTextChildren,
+          }),
+        ],
+      }),
+    ],
+  });
+
+  const headerChildren: (Paragraph | Table)[] = [
+    headerBannerTable,
     // Spacer paragraph for gap between header banner and content
     new Paragraph({ spacing: { after: 400 }, children: [] }),
     // Property address bar with bottom border
@@ -994,10 +1030,10 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
         new TextRun({ text: propertyAddress, font: FONT, size: 20, color: '996E45' }),
       ],
     }),
-  );
+  ];
 
   // Footer: divider line, then contact + address + RICS logo below
-  const footerChildren: Paragraph[] = [
+  const footerChildren: (Paragraph | Table)[] = [
     // Divider line
     new Paragraph({
       spacing: { before: 200, after: 80 },
@@ -1044,21 +1080,33 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     }),
   ];
 
-  // Dark navy bottom strip — full-bleed with negative indent (matching PDF footer)
-  footerChildren.push(
-    new Paragraph({
-      spacing: { before: 80, after: 0 },
-      shading: { type: ShadingType.SOLID, fill: NAVY, color: NAVY },
-      indent: { left: -convertMillimetersToTwip(25), right: -convertMillimetersToTwip(25) },
-      children: [new TextRun({ text: ' ', font: FONT, size: 8 })],
-    }),
-  );
+  // Dark navy bottom strip — full-bleed table (matching PDF footer)
+  const footerNavyStrip = new Table({
+    width: { size: fullPageWidthTwip, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    indent: { size: -marginTwip, type: WidthType.DXA },
+    rows: [
+      new TableRow({
+        height: { value: 200, rule: HeightRule.ATLEAST },
+        children: [
+          new TableCell({
+            shading: navyCellShading,
+            borders: noBorders,
+            width: { size: fullPageWidthTwip, type: WidthType.DXA },
+            children: [new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: ' ', font: FONT, size: 4 })] })],
+          }),
+        ],
+      }),
+    ],
+  });
+  footerChildren.push(footerNavyStrip);
 
   // RICS logo below the contact info, right-aligned
   if (ricsLogoBuf) {
-    footerChildren[1].addChildElement(new TextRun({ text: '\t', font: FONT }));
+    const phoneRow = footerChildren[1] as Paragraph;
+    phoneRow.addChildElement(new TextRun({ text: '\t', font: FONT }));
     // Add RICS logo floating right on the first contact row
-    footerChildren[1].addChildElement(
+    phoneRow.addChildElement(
       new ImageRun({
         data: ricsLogoBuf,
         transformation: { width: 80, height: 32 },
@@ -1093,16 +1141,16 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
       },
     },
     sections: [
-      // Section 1: Cover page — no header or footer, tiny margins for full-bleed navy
+      // Section 1: Cover page — no header or footer, near-zero margins for full-bleed navy
       {
         properties: {
           page: {
             size: pageSize,
             margin: {
-              top: convertMillimetersToTwip(10),
-              bottom: convertMillimetersToTwip(5),
-              left: convertMillimetersToTwip(5),
-              right: convertMillimetersToTwip(5),
+              top: convertMillimetersToTwip(2),
+              bottom: convertMillimetersToTwip(2),
+              left: convertMillimetersToTwip(2),
+              right: convertMillimetersToTwip(2),
             },
           },
         },
