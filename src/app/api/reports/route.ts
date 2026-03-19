@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('reports')
-    .select('id, status, report_type, property_address, postcode, reference_number, valuation_figure, created_at, updated_at', { count: 'exact' })
+    .select('id, status, report_type, property_address, postcode, reference_number, valuation_figure, assigned_to, created_at, updated_at', { count: 'exact' })
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false })
     .range(offset, offset + limit - 1);
@@ -83,6 +83,7 @@ export async function POST(request: Request) {
     client_details: body.client_details || {},
     land_registry_title: body.land_registry_title || body.title_number || '',
     property_details: body.property_details || {},
+    assigned_to: body.assigned_to || null,
   };
 
   // Include google_drive_folder_id if provided

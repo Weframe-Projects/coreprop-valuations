@@ -51,7 +51,7 @@ export async function PATCH(
     'inspection_data', 'comparables', 'generated_sections',
     'valuation_figure', 'valuation_figure_words', 'auction_reserve', 'auction_reserve_words',
     'local_authority', 'postal_district', 'land_registry_title',
-    'google_drive_folder_id',
+    'google_drive_folder_id', 'assigned_to',
   ];
 
   const updates: Record<string, unknown> = {};
