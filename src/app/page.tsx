@@ -132,7 +132,7 @@ export default function DashboardPage() {
               onClick={() => { setViewLevel('folders'); setSelectedFolder(null); }}
               className={`hover:text-[#c49a6c] transition ${viewLevel === 'folders' ? 'text-gray-900 font-medium' : ''}`}
             >
-              {selectedPerson}
+              {selectedPerson === '__unassigned__' ? 'Unassigned' : selectedPerson}
             </button>
           </>
         )}
@@ -164,7 +164,7 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
               {viewLevel === 'people' && 'Reports'}
-              {viewLevel === 'folders' && selectedPerson}
+              {viewLevel === 'folders' && (selectedPerson === '__unassigned__' ? 'Unassigned' : selectedPerson)}
               {viewLevel === 'reports' && (selectedFolder === 'completed' ? 'Completed Valuations' : 'Pending Valuations')}
             </h1>
             <p className="text-gray-500 mt-0.5 text-sm">
