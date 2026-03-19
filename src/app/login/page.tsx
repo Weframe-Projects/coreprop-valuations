@@ -37,7 +37,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img src="/coreprop-logo-small.png" alt="The CoreProp Group" className="h-20 mx-auto mb-3" />
+          <img src="/coreprop-logo.png" alt="The CoreProp Group" className="h-20 mx-auto mb-3" />
           <p className="text-gray-400 mt-2 text-sm">Valuation Report Generator</p>
         </div>
 

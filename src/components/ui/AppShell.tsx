@@ -28,7 +28,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-3">
-              <img src="/coreprop-logo-small.png" alt="The CoreProp Group" className="h-10" />
+              <img src="/coreprop-logo.png" alt="The CoreProp Group" className="h-10" />
               <span className="hidden sm:inline text-gray-400 text-sm border-l border-gray-600 pl-3">
                 Valuation Reports
               </span>

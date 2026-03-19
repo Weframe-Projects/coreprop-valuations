@@ -543,15 +543,27 @@ function getContentStyles(): string {
       left: 0;
       right: 0;
       z-index: 100;
+      background: #fff;
     }
     .footer-bar {
+      border-top: 2px solid #1a2e3b;
       margin: 0 25.4mm;
-      padding: 4mm 0;
+      padding: 4mm 0 3mm;
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
       align-items: center;
     }
-    .footer-rics img { height: 9mm; width: auto; }
+    .footer-left {
+      display: flex;
+      gap: 8mm;
+    }
+    .footer-col {
+      font-size: 7.5pt;
+      color: #333;
+      line-height: 1.6;
+    }
+    .footer-rics { display: flex; align-items: center; }
+    .footer-rics img { height: 12mm; width: auto; }
 
     /* --- Page break utilities --- */
     .page-break {
@@ -567,7 +579,7 @@ function getContentStyles(): string {
 
     /* --- Content area (left/right padding for margins) --- */
     .content-area {
-      padding: 10mm 25.4mm 30mm;
+      padding: 10mm 25.4mm 38mm;
     }
 
     /* --- Section headings --- */
@@ -1174,6 +1186,18 @@ export function buildContentHTML(data: {
   // --- Build the repeating footer HTML (appears as fixed div) ---
   const footerHTML = `
     <div class="footer-bar">
+      <div class="footer-left">
+        <div class="footer-col footer-contact">
+          p: ${escapeHTML(firmPhone)}<br>
+          e: ${escapeHTML(firmEmail)}<br>
+          w: www.coreprop.co.uk
+        </div>
+        <div class="footer-col footer-address">
+          First Floor,<br>
+          4 Pentonville Road,<br>
+          London, N1 9HF
+        </div>
+      </div>
       <div class="footer-rics">
         <img src="${getRicsLogoGoldDataUrl()}" alt="Regulated by RICS" />
       </div>
