@@ -523,9 +523,9 @@ function buildCoverPage(data: {
     }),
   );
 
-  // Spacers to push footer to bottom
-  for (let i = 0; i < 12; i++) {
-    cellChildren.push(new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: ' ', font: FONT, size: 4, color: NAVY })] }));
+  // Spacers to push contact info toward bottom (fewer, larger gaps)
+  for (let i = 0; i < 6; i++) {
+    cellChildren.push(new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: ' ', font: FONT, size: 4, color: NAVY })] }));
   }
 
   // Contact info at bottom
@@ -545,8 +545,7 @@ function buildCoverPage(data: {
 
   // Wrap everything in a single full-page table with navy cell shading
   const fullPageWidth = convertMillimetersToTwip(210);
-  // Row height: full page height — EXACT rule caps the row so it won't overflow
-  const coverRowHeight = convertMillimetersToTwip(297);
+  // No fixed row height — spacer paragraphs fill the page, cell shading covers all
   const noCellBorders = {
     top: { style: BorderStyle.NONE, size: 0, color: NAVY },
     bottom: { style: BorderStyle.NONE, size: 0, color: NAVY },
@@ -559,7 +558,7 @@ function buildCoverPage(data: {
     layout: TableLayoutType.FIXED,
     rows: [
       new TableRow({
-        height: { value: coverRowHeight, rule: HeightRule.EXACT },
+        // No height constraint — content + spacers fill naturally
         children: [
           new TableCell({
             shading: navyCellShading,
