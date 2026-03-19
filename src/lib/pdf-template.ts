@@ -528,6 +528,8 @@ function getContentStyles(): string {
       padding: 0;
       vertical-align: top;
     }
+    .page-table thead { display: table-header-group; }
+    .page-table tfoot { display: table-footer-group; }
 
     /* Header repeats on every page via <thead> */
     .page-header-row td {
@@ -569,11 +571,12 @@ function getContentStyles(): string {
     .page-footer-row td {
       padding: 0;
       vertical-align: bottom;
+      height: 22mm;
     }
     .footer-bar {
       border-top: 2px solid #1a2e3b;
       margin: 0 25.4mm;
-      padding: 4mm 0 3mm;
+      padding: 3mm 0 2mm;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -589,6 +592,12 @@ function getContentStyles(): string {
     }
     .footer-rics { display: flex; align-items: center; }
     .footer-rics img { height: 12mm; width: auto; }
+    .footer-bottom-strip {
+      background: #1a2e3b;
+      height: 3mm;
+      width: 210mm;
+      margin-top: 2mm;
+    }
 
     /* --- Page break utilities --- */
     .page-break {
@@ -1232,7 +1241,8 @@ export function buildContentHTML(data: {
       <div class="footer-rics">
         <img src="${getRicsLogoGoldDataUrl()}" alt="Regulated by RICS" />
       </div>
-    </div>`;
+    </div>
+    <div class="footer-bottom-strip"></div>`;
 
   // --- Helper: wrap content in the table row structure ---
   function wrapInPageBody(content: string): string {
