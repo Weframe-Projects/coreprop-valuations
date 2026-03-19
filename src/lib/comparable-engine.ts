@@ -139,13 +139,44 @@ function getPropertyTypeGroup(type: string): PropertyTypeGroup {
 // --- EPC matching ---
 
 /**
+ * Aggressively normalize an address for fuzzy matching:
+ * expand abbreviations, strip flat/unit prefixes, collapse whitespace.
+ */
+function normalizeAddressAggressive(address: string): string {
+  return address
+    .toLowerCase()
+    .replace(/,/g, '')
+    .replace(/\bflat\b/gi, '')
+    .replace(/\bapartment\b/gi, '')
+    .replace(/\bunit\b/gi, '')
+    .replace(/\bst\b/g, 'street')
+    .replace(/\brd\b/g, 'road')
+    .replace(/\bave\b/g, 'avenue')
+    .replace(/\bln\b/g, 'lane')
+    .replace(/\bdr\b/g, 'drive')
+    .replace(/\bct\b/g, 'court')
+    .replace(/\bcl\b/g, 'close')
+    .replace(/\bcres\b/g, 'crescent')
+    .replace(/\bpl\b/g, 'place')
+    .replace(/\bgdns?\b/g, 'gardens')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Extract just the numeric portion of a PAON (e.g., "10a" → "10") */
+function extractNumericPaon(paon: string): string {
+  const match = paon.match(/^(\d+)/);
+  return match ? match[1] : paon;
+}
+
+/**
  * Given a Land Registry sale record and a list of EPC records for the same
  * postcode area, find the best matching EPC record.
  *
- * Matching strategy:
- * 1. Normalize both the LR address components and EPC address
- * 2. Compare PAON (house number) and street from LR against EPC address
- * 3. If multiple EPC records match, use the most recent one (by lodgement date)
+ * Three-tier matching strategy:
+ * Tier 1 (strict): PAON + street both present as substrings in EPC address
+ * Tier 2 (relaxed): Aggressive normalization + numeric PAON + Jaccard > 0.4
+ * Tier 3 (fuzzy):  Jaccard similarity > 0.5 across all EPC records for same postcode
  */
 function matchEPCRecord(
   sale: LandRegistrySale,
@@ -153,47 +184,73 @@ function matchEPCRecord(
 ): EPCData | null {
   if (epcRecords.length === 0) return null;
 
-  // Build the key parts from LR data
   const lrPaon = sale.paon.toLowerCase().trim();
   const lrStreet = sale.street.toLowerCase().trim();
   const lrSaon = sale.saon.toLowerCase().trim();
 
-  // If we have no PAON or street, we can't match reliably
   if (!lrPaon && !lrStreet) return null;
 
-  // Score each EPC record
-  const candidates: { epc: EPCData; quality: number }[] = [];
+  // Helper: pick best candidate from a list by quality then recency
+  const pickBest = (candidates: { epc: EPCData; quality: number }[]): EPCData | null => {
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => {
+      if (b.quality !== a.quality) return b.quality - a.quality;
+      return b.epc.lodgementDate.localeCompare(a.epc.lodgementDate);
+    });
+    return candidates[0].epc;
+  };
 
+  // --- Tier 1: Strict match (original logic) ---
+  const tier1: { epc: EPCData; quality: number }[] = [];
   for (const epc of epcRecords) {
     const epcAddr = normalizeAddress(epc.address);
-
-    // Check if the PAON (house number) appears in the EPC address
     const hasPaon = lrPaon ? epcAddr.includes(lrPaon) : false;
     const hasStreet = lrStreet ? epcAddr.includes(lrStreet) : false;
     const hasSaon = lrSaon ? epcAddr.includes(lrSaon) : false;
 
-    // For a match, we require the PAON and street to both be present
     if (hasPaon && hasStreet) {
-      // Quality score: higher is better
       let quality = 2;
-      // Bonus if the SAON also matches (for flats)
       if (lrSaon && hasSaon) quality += 1;
-      // Bonus for exact-ish match (EPC address starts with the PAON)
       if (epcAddr.startsWith(lrPaon)) quality += 1;
+      tier1.push({ epc, quality });
+    }
+  }
+  const tier1Result = pickBest(tier1);
+  if (tier1Result) return tier1Result;
 
-      candidates.push({ epc, quality });
+  // --- Tier 2: Relaxed match (aggressive normalization + numeric PAON + Jaccard) ---
+  const numericPaon = extractNumericPaon(lrPaon);
+  const lrAddrNorm = normalizeAddressAggressive(`${lrSaon} ${lrPaon} ${lrStreet}`);
+  const tier2: { epc: EPCData; quality: number }[] = [];
+
+  for (const epc of epcRecords) {
+    const epcAddrNorm = normalizeAddressAggressive(epc.address);
+
+    // Must contain the numeric house number at minimum
+    if (numericPaon && !epcAddrNorm.includes(numericPaon)) continue;
+
+    const similarity = addressSimilarity(lrAddrNorm, epcAddrNorm);
+    if (similarity >= 0.4) {
+      tier2.push({ epc, quality: Math.round(similarity * 10) });
+    }
+  }
+  const tier2Result = pickBest(tier2);
+  if (tier2Result) return tier2Result;
+
+  // --- Tier 3: Fuzzy postcode-wide match (Jaccard > 0.5) ---
+  const lrFullAddr = normalizeAddress(`${lrSaon} ${lrPaon} ${lrStreet}`);
+  let bestScore = 0;
+  let bestEpc: EPCData | null = null;
+
+  for (const epc of epcRecords) {
+    const score = addressSimilarity(lrFullAddr, normalizeAddress(epc.address));
+    if (score > bestScore) {
+      bestScore = score;
+      bestEpc = epc;
     }
   }
 
-  if (candidates.length === 0) return null;
-
-  // Sort by quality descending, then by lodgement date descending (most recent first)
-  candidates.sort((a, b) => {
-    if (b.quality !== a.quality) return b.quality - a.quality;
-    return b.epc.lodgementDate.localeCompare(a.epc.lodgementDate);
-  });
-
-  return candidates[0].epc;
+  return bestEpc && bestScore >= 0.5 ? bestEpc : null;
 }
 
 // --- Description generator ---
@@ -211,19 +268,51 @@ function buildDescription(params: {
   floorArea: number | null;
 }): string {
   const { propertyTypeLabel, bedrooms, floorArea } = params;
-
-  // Convert type label to lowercase for description
   const typeLower = propertyTypeLabel.toLowerCase();
+  const hasArea = floorArea && floorArea > 0;
+  const hasBeds = bedrooms && bedrooms > 0;
 
-  if (bedrooms && bedrooms > 0) {
-    return `${typeLower}, ${bedrooms} rooms (EPC)`;
+  if (hasBeds && hasArea) {
+    return `${bedrooms}-bed ${typeLower}, ${Math.round(floorArea)}m\u00B2`;
   }
-
-  if (floorArea && floorArea > 0) {
+  if (hasBeds) {
+    return `${bedrooms}-bed ${typeLower}`;
+  }
+  if (hasArea) {
     return `${propertyTypeLabel}, ${Math.round(floorArea)}m\u00B2`;
   }
-
   return propertyTypeLabel;
+}
+
+// --- Hard filter: remove incompatible comparables ---
+
+/**
+ * Filter out fundamentally incompatible comparables:
+ * - Flats should never be compared to houses (and vice versa)
+ * - If bedrooms are known, exclude comps differing by more than 2 bedrooms
+ */
+function filterIncompatibleComparables(
+  comparables: Comparable[],
+  subjectPropertyType: string,
+  subjectBedrooms: number | null,
+): Comparable[] {
+  const subjGroup = getPropertyTypeGroup(subjectPropertyType.toUpperCase());
+
+  return comparables.filter((comp) => {
+    const compTypeCode = getPropertyTypeCode(comp.propertyType);
+    const compGroup = getPropertyTypeGroup(compTypeCode);
+
+    // Hard filter: apartments vs houses
+    if (subjGroup === 'apartment' && compGroup !== 'apartment') return false;
+    if (subjGroup !== 'apartment' && subjGroup !== 'other' && compGroup === 'apartment') return false;
+
+    // Bedroom filter: exclude if both known and differ by more than 2
+    if (subjectBedrooms && subjectBedrooms > 0 && comp.bedrooms && comp.bedrooms > 0) {
+      if (Math.abs(subjectBedrooms - comp.bedrooms) > 2) return false;
+    }
+
+    return true;
+  });
 }
 
 // --- Scoring function ---
@@ -231,16 +320,18 @@ function buildDescription(params: {
 /**
  * Score a single comparable against the subject property.
  * Returns a value between 0 and 100 based on:
- *   - Distance/Proximity: 0-30 points (uses Haversine if lat/lng available, else postcode)
- *   - Recency of sale: 0-25 points
- *   - Property type match: 0-25 points
- *   - Size similarity (if floor area available): 0-20 points
+ *   - Distance/Proximity: 0-25 points
+ *   - Recency of sale: 0-20 points
+ *   - Property type match: 0-20 points
+ *   - Bedroom match: 0-15 points
+ *   - Size similarity (floor area): 0-20 points
  */
 export function scoreComparable(params: {
   comparable: {
     saleDate: string;
     propertyType: string;
     floorArea: number | null;
+    bedrooms?: number | null;
     postcode: string;
     street: string;
     distanceMeters?: number | null;
@@ -249,28 +340,27 @@ export function scoreComparable(params: {
     postcode: string;
     floorArea: number;
     propertyType: string;
+    bedrooms?: number | null;
     street: string;
   };
 }): number {
   const { comparable, subject } = params;
   let score = 0;
 
-  // --- Distance/Proximity (0-30 points) ---
+  // --- Distance/Proximity (0-25 points) ---
   if (comparable.distanceMeters != null && comparable.distanceMeters >= 0) {
-    // Use actual distance if available
     if (comparable.distanceMeters <= 200) {
-      score += 30; // Very close — essentially same street
+      score += 25;
     } else if (comparable.distanceMeters <= QUARTER_MILE_M) {
-      score += 25; // Within quarter mile
+      score += 21;
     } else if (comparable.distanceMeters <= HALF_MILE_M) {
-      score += 18; // Within half mile
+      score += 15;
     } else if (comparable.distanceMeters <= ONE_MILE_M) {
-      score += 10; // Within one mile
+      score += 8;
     } else {
-      score += 3; // Further away
+      score += 2;
     }
   } else {
-    // Fallback to postcode-based proximity
     const compStreet = normalizeAddress(comparable.street);
     const subjStreet = normalizeAddress(subject.street);
     const compDistrict = getPostcodeDistrict(comparable.postcode);
@@ -279,37 +369,50 @@ export function scoreComparable(params: {
     const subjSectorDigit = getInwardSectorDigit(subject.postcode);
 
     if (compStreet && subjStreet && compStreet === subjStreet) {
-      score += 30;
+      score += 25;
     } else if (compDistrict === subjDistrict && compSectorDigit === subjSectorDigit) {
-      score += 20;
+      score += 17;
     } else if (compDistrict === subjDistrict) {
-      score += 10;
+      score += 8;
     }
   }
 
-  // --- Recency (0-25 points) ---
+  // --- Recency (0-20 points) ---
   const saleDate = new Date(comparable.saleDate);
   const now = new Date();
   const monthsAgo = (now.getTime() - saleDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
 
   if (monthsAgo <= 6) {
-    score += 25;
-  } else if (monthsAgo <= 12) {
     score += 20;
+  } else if (monthsAgo <= 12) {
+    score += 16;
   } else if (monthsAgo <= 24) {
-    score += 12;
+    score += 10;
   } else if (monthsAgo <= 36) {
-    score += 5;
+    score += 4;
   }
 
-  // --- Property type match (0-25 points) ---
+  // --- Property type match (0-20 points) ---
   const compTypeCode = getPropertyTypeCode(comparable.propertyType);
   const subjTypeCode = subject.propertyType.toUpperCase();
 
   if (compTypeCode === subjTypeCode) {
-    score += 25;
+    score += 20;
   } else if (getPropertyTypeGroup(compTypeCode) === getPropertyTypeGroup(subjTypeCode)) {
-    score += 15;
+    score += 12;
+  }
+
+  // --- Bedroom match (0-15 points) ---
+  const compBeds = comparable.bedrooms;
+  const subjBeds = subject.bedrooms;
+  if (compBeds && compBeds > 0 && subjBeds && subjBeds > 0) {
+    const diff = Math.abs(compBeds - subjBeds);
+    if (diff === 0) score += 15;
+    else if (diff === 1) score += 10;
+    else if (diff === 2) score += 5;
+    // diff >= 3: 0 points
+  } else {
+    score += 7; // Unknown bedrooms — neutral
   }
 
   // --- Size similarity (0-20 points) ---
@@ -327,8 +430,7 @@ export function scoreComparable(params: {
       score += 5;
     }
   } else {
-    // No floor area data available - award neutral score
-    score += 10;
+    score += 5; // No floor area — penalise (was 10)
   }
 
   return score;
@@ -407,6 +509,7 @@ export async function findComparables(params: {
   subjectPostcode: string;
   subjectFloorArea: number;
   subjectPropertyType: string;
+  subjectBedrooms?: number | null;
   subjectLat?: number;
   subjectLng?: number;
   auctionComps?: AuctionComparable[];
@@ -419,6 +522,7 @@ export async function findComparables(params: {
     subjectPostcode: rawPostcode,
     subjectFloorArea,
     subjectPropertyType,
+    subjectBedrooms = null,
     subjectLat,
     subjectLng,
     auctionComps = [],
@@ -570,6 +674,7 @@ export async function findComparables(params: {
         saleDate: sale.date,
         propertyType: propertyTypeLabel,
         floorArea,
+        bedrooms,
         postcode: sale.postcode,
         street: sale.street,
         distanceMeters,
@@ -578,6 +683,7 @@ export async function findComparables(params: {
         postcode: subjectPostcode,
         floorArea: subjectFloorArea,
         propertyType: subjectPropertyType,
+        bedrooms: subjectBedrooms,
         street: subjectStreet,
       },
     });
@@ -678,6 +784,7 @@ export async function findComparables(params: {
           saleDate: ac.saleDate,
           propertyType: ac.propertyType || 'O',
           floorArea: matchedFloorArea,
+          bedrooms: ac.bedrooms,
           postcode: ac.postcode,
           street: extractStreetFromAddress(ac.address),
           distanceMeters,
@@ -686,6 +793,7 @@ export async function findComparables(params: {
           postcode: subjectPostcode,
           floorArea: subjectFloorArea,
           propertyType: subjectPropertyType,
+          bedrooms: subjectBedrooms,
           street: subjectStreet,
         },
       });
@@ -738,6 +846,7 @@ export async function findComparables(params: {
           saleDate: hv.valuationDate,
           propertyType: hv.propertyType || 'O',
           floorArea: hv.floorArea,
+          bedrooms: hv.bedrooms,
           postcode: hv.postcode,
           street: extractStreetFromAddress(hv.propertyAddress),
           distanceMeters,
@@ -746,6 +855,7 @@ export async function findComparables(params: {
           postcode: subjectPostcode,
           floorArea: subjectFloorArea,
           propertyType: subjectPropertyType,
+          bedrooms: subjectBedrooms,
           street: subjectStreet,
         },
       });
@@ -783,14 +893,26 @@ export async function findComparables(params: {
     return [];
   }
 
-  // Step 7: Sort by relevance score descending
-  comparables.sort((a, b) => b.relevanceScore - a.relevanceScore);
+  // Step 7: Hard-filter incompatible comparables (flats vs houses, bedroom mismatch)
+  const filtered = filterIncompatibleComparables(comparables, subjectPropertyType, subjectBedrooms);
+  console.log(`[comparable-engine] After hard filter: ${filtered.length} of ${comparables.length} retained`);
 
-  // Step 8: Mark the top N as selected
-  for (let i = 0; i < Math.min(autoSelectCount, comparables.length); i++) {
-    comparables[i].isSelected = true;
+  // Use filtered list if it has enough results, otherwise fall back to all
+  const finalList = filtered.length >= 3 ? filtered : comparables;
+
+  // Step 8: Sort by relevance score descending
+  finalList.sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+  // Step 9: Mark the top N as selected (only if above minimum score threshold)
+  const MIN_SCORE = 25;
+  let selectedCount = 0;
+  for (let i = 0; i < finalList.length && selectedCount < autoSelectCount; i++) {
+    if (finalList[i].relevanceScore >= MIN_SCORE) {
+      finalList[i].isSelected = true;
+      selectedCount++;
+    }
   }
 
-  // Step 9: Return up to maxResults
-  return comparables.slice(0, maxResults);
+  // Step 10: Return up to maxResults
+  return finalList.slice(0, maxResults);
 }

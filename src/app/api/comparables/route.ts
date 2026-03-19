@@ -4,7 +4,7 @@ import { findComparables } from '@/lib/comparable-engine';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { address, postcode, floorArea, propertyType, lat, lng } = body;
+    const { address, postcode, floorArea, propertyType, bedrooms, lat, lng } = body;
 
     if (!address || typeof address !== 'string') {
       return NextResponse.json(
@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
       subjectPostcode: postcode,
       subjectFloorArea: typeof floorArea === 'number' && floorArea > 0 ? floorArea : 0,
       subjectPropertyType: propertyType || 'S',
+      subjectBedrooms: typeof bedrooms === 'number' ? bedrooms : null,
       subjectLat: lat,
       subjectLng: lng,
     });

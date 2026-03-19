@@ -236,12 +236,19 @@ function buildComparableTable(comparables: Comparable[]): string {
 
     const adjustmentNote = (comp as Comparable & { adjustmentNotes?: string }).adjustmentNotes;
 
+    // Street View thumbnail for the comparable
+    const streetViewUrl = getDirectStreetViewUrl(comp.address, '200x120');
+    const streetViewImg = streetViewUrl
+      ? `<img src="${streetViewUrl}" alt="" style="width: 100px; height: 60px; object-fit: cover; margin-bottom: 4px; display: block; border-radius: 2px;" onerror="this.style.display='none'" />`
+      : '';
+
     return `
       <tr>
         <td style="padding: 8px 10px; border: 1px solid #ddd; vertical-align: top; font-size: 9.5pt; white-space: nowrap;">
           <strong>${statusLabel}</strong><br>${dateLabel}
         </td>
         <td style="padding: 8px 10px; border: 1px solid #ddd; vertical-align: top; font-size: 9.5pt;">
+          ${streetViewImg}
           ${escapeHTML(comp.address)}
         </td>
         <td style="padding: 8px 10px; border: 1px solid #ddd; vertical-align: top; font-size: 9.5pt;">

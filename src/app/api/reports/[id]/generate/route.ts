@@ -410,6 +410,7 @@ export async function POST(
   const propertyDetails = (updatedReport?.property_details || {}) as Partial<PropertyDetails>;
   const subjectFloorArea = propertyDetails.floorArea || epcData?.floorArea || 0;
   const subjectPropertyType = mapPropertyTypeToLRCode(propertyDetails.propertyType, epcData);
+  const subjectBedrooms = epcData?.numberOfRooms ?? null;
 
   let comparables: Comparable[] = reportRow.comparables || [];
 
@@ -419,6 +420,7 @@ export async function POST(
       subjectPostcode: reportRow.postcode,
       subjectFloorArea,
       subjectPropertyType,
+      subjectBedrooms,
       subjectLat: googleMapsData?.lat,
       subjectLng: googleMapsData?.lng,
       auctionComps,
