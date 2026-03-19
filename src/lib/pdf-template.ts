@@ -608,9 +608,9 @@ function getContentStyles(): string {
     }
 
     /* --- Content area (left/right padding for margins) --- */
-    /* Top: gap below repeating header; Bottom: must clear the fixed footer */
+    /* Top: gap below repeating header; Bottom: clear the fixed footer (28mm Puppeteer margin + footer height) */
     .content-area {
-      padding: 18mm 25.4mm 54mm;
+      padding: 16mm 25.4mm 28mm;
     }
 
     /* --- Section headings --- */
@@ -631,7 +631,7 @@ function getContentStyles(): string {
 
     .section-body p {
       margin-bottom: 8px;
-      text-align: justify;
+      text-align: left;
       font-size: 10.5pt;
       line-height: 1.6;
       orphans: 3;
