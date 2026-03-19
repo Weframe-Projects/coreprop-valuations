@@ -891,12 +891,14 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
   const marginTwip = convertMillimetersToTwip(25);
   const fullPageWidthTwip = convertMillimetersToTwip(210);
 
-  // Left cell: logo
-  const logoChildren: Paragraph[] = [];
+  // Header: single full-bleed navy table containing logo, text, and address bar
+  const headerCellChildren: Paragraph[] = [];
+
+  // Logo
   if (corepropLogoBuf) {
-    logoChildren.push(
+    headerCellChildren.push(
       new Paragraph({
-        spacing: { before: 60, after: 0 },
+        spacing: { after: 0 },
         children: [
           new ImageRun({
             data: corepropLogoBuf,
@@ -907,7 +909,7 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
       }),
     );
   } else {
-    logoChildren.push(
+    headerCellChildren.push(
       new Paragraph({
         spacing: { after: 0 },
         children: [
@@ -919,143 +921,101 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     );
   }
 
-  // Right cell: Chartered Surveyors + Specialist Valuers
-  const rightTextChildren: Paragraph[] = [
+  // Chartered Surveyors + Specialist Valuers (right-aligned using tab)
+  headerCellChildren.push(
     new Paragraph({
-      spacing: { before: 60, after: 0 },
-      alignment: AlignmentType.RIGHT,
+      spacing: { after: 0 },
       children: [
+        new TextRun({ text: '\t', font: FONT }),
         new TextRun({ text: 'Chartered Surveyors', font: FONT, size: FONT_SIZE, bold: true, color: 'FFFFFF' }),
       ],
+      tabStops: [{ type: TabStopType.RIGHT, position: convertMillimetersToTwip(170) }],
     }),
     new Paragraph({
-      spacing: { after: 60 },
-      alignment: AlignmentType.RIGHT,
+      spacing: { after: 120 },
       children: [
+        new TextRun({ text: '\t', font: FONT }),
         new TextRun({ text: 'Specialist Valuers \u2013 Regulated by RICS', font: FONT, size: 16, color: 'C0C0C0' }),
       ],
+      tabStops: [{ type: TabStopType.RIGHT, position: convertMillimetersToTwip(170) }],
     }),
-  ];
+  );
 
-  const headerBannerTable = new Table({
+  // Address bar with gold divider
+  headerCellChildren.push(
+    new Paragraph({
+      spacing: { before: 120, after: 0 },
+      border: { top: { style: BorderStyle.SINGLE, size: 2, color: GOLD, space: 4 } },
+      children: [
+        new TextRun({ text: propertyAddress, font: FONT, size: 20, color: GOLD }),
+      ],
+    }),
+  );
+
+  const headerTable = new Table({
     width: { size: fullPageWidthTwip, type: WidthType.DXA },
     layout: TableLayoutType.FIXED,
     indent: { size: -marginTwip, type: WidthType.DXA },
     rows: [
       new TableRow({
-        children: [
-          new TableCell({
-            shading: navyCellShading,
-            borders: noBorders,
-            width: { size: Math.round(fullPageWidthTwip * 0.5), type: WidthType.DXA },
-            margins: { left: convertMillimetersToTwip(20), top: 60, bottom: 60 },
-            verticalAlign: VerticalAlign.CENTER,
-            children: logoChildren,
-          }),
-          new TableCell({
-            shading: navyCellShading,
-            borders: noBorders,
-            width: { size: Math.round(fullPageWidthTwip * 0.5), type: WidthType.DXA },
-            margins: { right: convertMillimetersToTwip(20), top: 60, bottom: 60 },
-            verticalAlign: VerticalAlign.CENTER,
-            children: rightTextChildren,
-          }),
-        ],
-      }),
-    ],
-  });
-
-  const headerChildren: (Paragraph | Table)[] = [
-    headerBannerTable,
-    // Spacer paragraph for gap between header banner and content
-    new Paragraph({ spacing: { after: 400 }, children: [] }),
-    // Property address bar with bottom border
-    new Paragraph({
-      spacing: { after: 200 },
-      border: {
-        bottom: { style: BorderStyle.SINGLE, size: 3, color: NAVY, space: 6 },
-      },
-      children: [
-        new TextRun({ text: propertyAddress, font: FONT, size: 20, color: '996E45' }),
-      ],
-    }),
-  ];
-
-  // Footer: divider line, then contact + address + RICS logo below
-  const footerChildren: (Paragraph | Table)[] = [
-    // Divider line
-    new Paragraph({
-      spacing: { before: 200, after: 80 },
-      border: {
-        top: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 4 },
-      },
-      children: [],
-    }),
-    // Row 1: phone + address col 1
-    new Paragraph({
-      spacing: { after: 0 },
-      children: [
-        new TextRun({ text: `p: ${data.firmSettings?.phone || '+44 (0)20 8050 5060'}`, font: FONT, size: 15, color: GREY }),
-        new TextRun({ text: '\t', font: FONT }),
-        new TextRun({ text: 'First Floor,', font: FONT, size: 15, color: GREY }),
-      ],
-      tabStops: [
-        { type: TabStopType.CENTER, position: Math.round(TabStopPosition.MAX / 2) },
-      ],
-    }),
-    // Row 2: email + address col 2
-    new Paragraph({
-      spacing: { after: 0 },
-      children: [
-        new TextRun({ text: `e: ${data.firmSettings?.email || 'info@coreprop.co.uk'}`, font: FONT, size: 15, color: GREY }),
-        new TextRun({ text: '\t', font: FONT }),
-        new TextRun({ text: '4 Pentonville Road,', font: FONT, size: 15, color: GREY }),
-      ],
-      tabStops: [
-        { type: TabStopType.CENTER, position: Math.round(TabStopPosition.MAX / 2) },
-      ],
-    }),
-    // Row 3: website + address col 3
-    new Paragraph({
-      spacing: { after: 0 },
-      children: [
-        new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 15, color: GREY }),
-        new TextRun({ text: '\t', font: FONT }),
-        new TextRun({ text: 'London, N1 9HF', font: FONT, size: 15, color: GREY }),
-      ],
-      tabStops: [
-        { type: TabStopType.CENTER, position: Math.round(TabStopPosition.MAX / 2) },
-      ],
-    }),
-  ];
-
-  // Dark navy bottom strip — full-bleed table (matching PDF footer)
-  const footerNavyStrip = new Table({
-    width: { size: fullPageWidthTwip, type: WidthType.DXA },
-    layout: TableLayoutType.FIXED,
-    indent: { size: -marginTwip, type: WidthType.DXA },
-    rows: [
-      new TableRow({
-        height: { value: 200, rule: HeightRule.ATLEAST },
         children: [
           new TableCell({
             shading: navyCellShading,
             borders: noBorders,
             width: { size: fullPageWidthTwip, type: WidthType.DXA },
-            children: [new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: ' ', font: FONT, size: 4 })] })],
+            margins: {
+              top: convertMillimetersToTwip(3),
+              bottom: convertMillimetersToTwip(3),
+              left: convertMillimetersToTwip(20),
+              right: convertMillimetersToTwip(10),
+            },
+            children: headerCellChildren,
           }),
         ],
       }),
     ],
   });
-  footerChildren.push(footerNavyStrip);
 
-  // RICS logo below the contact info, right-aligned
+  const headerChildren: (Paragraph | Table)[] = [headerTable];
+
+  // Footer: full-bleed navy table with contact info + RICS logo inside
+  const footerCellChildren: Paragraph[] = [
+    // Divider line
+    new Paragraph({
+      spacing: { after: 80 },
+      border: { top: { style: BorderStyle.SINGLE, size: 1, color: '3a5a6b', space: 4 } },
+      children: [],
+    }),
+    // Phone + address
+    new Paragraph({
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: `p: ${data.firmSettings?.phone || '+44 (0)20 8050 5060'}`, font: FONT, size: 15, color: 'C0C0C0' }),
+        new TextRun({ text: '          ', font: FONT, size: 15 }),
+        new TextRun({ text: 'First Floor,', font: FONT, size: 15, color: 'C0C0C0' }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: `e: ${data.firmSettings?.email || 'info@coreprop.co.uk'}`, font: FONT, size: 15, color: 'C0C0C0' }),
+        new TextRun({ text: '          ', font: FONT, size: 15 }),
+        new TextRun({ text: '4 Pentonville Road,', font: FONT, size: 15, color: 'C0C0C0' }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 15, color: 'C0C0C0' }),
+        new TextRun({ text: '          ', font: FONT, size: 15 }),
+        new TextRun({ text: 'London, N1 9HF', font: FONT, size: 15, color: 'C0C0C0' }),
+      ],
+    }),
+  ];
+
+  // Add RICS logo floating right
   if (ricsLogoBuf) {
-    const phoneRow = footerChildren[1] as Paragraph;
-    phoneRow.addChildElement(new TextRun({ text: '\t', font: FONT }));
-    // Add RICS logo floating right on the first contact row
-    phoneRow.addChildElement(
+    footerCellChildren[1].addChildElement(
       new ImageRun({
         data: ricsLogoBuf,
         transformation: { width: 80, height: 32 },
@@ -1068,6 +1028,31 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
       }),
     );
   }
+
+  const footerTable = new Table({
+    width: { size: fullPageWidthTwip, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    indent: { size: -marginTwip, type: WidthType.DXA },
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            shading: navyCellShading,
+            borders: noBorders,
+            width: { size: fullPageWidthTwip, type: WidthType.DXA },
+            margins: {
+              top: convertMillimetersToTwip(3),
+              bottom: convertMillimetersToTwip(3),
+              left: convertMillimetersToTwip(20),
+              right: convertMillimetersToTwip(20),
+            },
+            children: footerCellChildren,
+          }),
+        ],
+      }),
+    ],
+  });
+  const footerChildren: (Paragraph | Table)[] = [footerTable];
 
   const pageSize = {
     width: convertMillimetersToTwip(210),
