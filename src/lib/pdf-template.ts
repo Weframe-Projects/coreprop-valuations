@@ -565,15 +565,10 @@ function getContentStyles(): string {
       border-bottom: 1.5px solid #1a2e3b;
     }
 
-    /* Footer uses position:fixed to repeat on every printed page */
-    .fixed-footer {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      width: 210mm;
-      z-index: 100;
-      background: #fff;
+    /* Footer repeats on every page via <tfoot> */
+    .page-footer-row td {
+      padding: 0;
+      vertical-align: bottom;
     }
     .footer-bar {
       border-top: 2px solid #1a2e3b;
@@ -608,9 +603,9 @@ function getContentStyles(): string {
     }
 
     /* --- Content area (left/right padding for margins) --- */
-    /* Top: gap below repeating header; Bottom: clear the fixed footer (28mm Puppeteer margin + footer height) */
+    /* tfoot handles footer spacing, so bottom padding is just for visual breathing room */
     .content-area {
-      padding: 16mm 25.4mm 28mm;
+      padding: 16mm 25.4mm 10mm;
     }
 
     /* --- Section headings --- */
@@ -624,9 +619,9 @@ function getContentStyles(): string {
       break-after: avoid;
     }
 
-    /* Accommodation section uses center alignment (matching DOCX) */
+    /* Accommodation section — left aligned like all other sections */
     .accommodation-section .section-body p {
-      text-align: center;
+      text-align: left;
     }
 
     .section-body p {
@@ -1344,14 +1339,14 @@ export function buildContentHTML(data: {
 </head>
 <body>
 
-  <!-- Fixed footer repeats on every printed page -->
-  <div class="fixed-footer">${footerHTML}</div>
-
-  <!-- Table with thead for repeating header -->
+  <!-- Table with thead/tfoot for repeating header and footer on every page -->
   <table class="page-table">
     <thead>
       <tr class="page-header-row"><td>${headerHTML}</td></tr>
     </thead>
+    <tfoot>
+      <tr class="page-footer-row"><td>${footerHTML}</td></tr>
+    </tfoot>
     <tbody>
       ${wrapInPageBody(allContent)}
     </tbody>
