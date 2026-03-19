@@ -535,9 +535,9 @@ function buildCoverPage(data: {
     right: { style: BorderStyle.NONE, size: 0, color: NAVY },
   };
 
-  // EXACT height = full A4 page. Cell margins are INSIDE this height.
-  // No top/bottom cell margins — use paragraph spacing instead to avoid overflow.
-  const coverRowHeight = convertMillimetersToTwip(297);
+  // EXACT height = nearly full A4 page. Leave ~3mm for Word's mandatory
+  // trailing paragraph after a table (Word quirk — can't end a section with a table).
+  const coverRowHeight = convertMillimetersToTwip(294);
 
   const coverTable = new Table({
     width: { size: fullPageWidth, type: WidthType.DXA },
@@ -563,7 +563,15 @@ function buildCoverPage(data: {
     ],
   });
 
-  return [coverTable] as unknown as Paragraph[];
+  // Tiny trailing paragraph with navy shading to fill the ~3mm gap after the table.
+  // Word always inserts a paragraph after a table — we make it navy and minimal.
+  const trailingPara = new Paragraph({
+    spacing: { before: 0, after: 0, line: 20 },
+    shading: { type: ShadingType.CLEAR, fill: NAVY },
+    children: [],
+  });
+
+  return [coverTable, trailingPara] as unknown as Paragraph[];
 }
 
 function getReportTypeDisplay(reportType: ReportType): string {
