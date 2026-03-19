@@ -443,27 +443,45 @@ function buildCoverPage(data: {
   const elements: Paragraph[] = [];
 
   // Spacing at top
-  elements.push(new Paragraph({ spacing: { after: 2400 }, children: [] }));
+  elements.push(new Paragraph({ spacing: { after: 1600 }, children: [] }));
 
-  // Brand name
-  elements.push(
-    new Paragraph({
-      children: [
-        new TextRun({ text: 'The', font: FONT, size: 36, color: GOLD }),
-      ],
-    }),
-    new Paragraph({
-      children: [
-        new TextRun({ text: 'CoreProp', font: FONT, size: 56, bold: true, color: NAVY }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 400 },
-      children: [
-        new TextRun({ text: 'Group', font: FONT, size: 36, color: GOLD }),
-      ],
-    }),
-  );
+  // Brand logo (actual image, not text)
+  const coverLogoBuf = getCorepropLogoBuffer();
+  if (coverLogoBuf) {
+    // Original: 1831x1343 → scale to ~180px wide, maintain 1.36:1 ratio
+    elements.push(
+      new Paragraph({
+        spacing: { after: 600 },
+        children: [
+          new ImageRun({
+            data: coverLogoBuf,
+            transformation: { width: 180, height: 132 },
+            type: 'png',
+          }),
+        ],
+      }),
+    );
+  } else {
+    // Fallback to text if image can't load
+    elements.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: 'The', font: FONT, size: 36, color: GOLD }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: 'CoreProp', font: FONT, size: 56, bold: true, color: NAVY }),
+        ],
+      }),
+      new Paragraph({
+        spacing: { after: 600 },
+        children: [
+          new TextRun({ text: 'Group', font: FONT, size: 36, color: GOLD }),
+        ],
+      }),
+    );
+  }
 
   // Report type
   elements.push(
@@ -867,10 +885,11 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
   // Row 1: Logo + Chartered Surveyors
   const headerRow1Children: (TextRun | ImageRun)[] = [];
   if (corepropLogoBuf) {
+    // Original: 1831x1343 (1.36:1 ratio) → 95px wide, 70px tall
     headerRow1Children.push(
       new ImageRun({
         data: corepropLogoBuf,
-        transformation: { width: 120, height: 50 },
+        transformation: { width: 95, height: 70 },
         type: 'png',
       }),
     );
@@ -935,10 +954,11 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
 
   // RICS logo in footer (right side of first row)
   if (ricsLogoBuf) {
+    // Original: 1536x614 (2.50:1 ratio) → 80px wide, 32px tall
     footerRow1Children.push(
       new ImageRun({
         data: ricsLogoBuf,
-        transformation: { width: 75, height: 35 },
+        transformation: { width: 80, height: 32 },
         type: 'png',
         floating: {
           horizontalPosition: { relative: 'margin', align: 'right' },
