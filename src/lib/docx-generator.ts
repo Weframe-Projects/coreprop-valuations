@@ -133,8 +133,8 @@ function buildNumberedSectionHeading(sectionNumber: number, title: string): Para
         text: `${sectionNumber}.  ${title}`,
         bold: true,
         font: FONT,
-        size: 22, // 11pt
-        color: NAVY,
+        size: FONT_SIZE, // 10.5pt — matching body text
+        color: '000000',
       }),
     ],
   });
@@ -444,7 +444,6 @@ function buildCoverPage(data: {
           text: reportTypeDisplay,
           font: FONT,
           size: 32,
-          bold: true,
           color: NAVY,
         }),
       ],
@@ -859,13 +858,23 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
           default: new Header({
             children: [
               new Paragraph({
-                spacing: { after: 80 },
+                spacing: { after: 0 },
                 children: [
                   new TextRun({ text: 'The ', font: FONT, size: 16, color: GOLD }),
                   new TextRun({ text: 'CoreProp ', font: FONT, size: 20, bold: true, color: NAVY }),
                   new TextRun({ text: 'Group', font: FONT, size: 16, color: GOLD }),
                   new TextRun({ text: '\t', font: FONT }),
                   new TextRun({ text: 'Chartered Surveyors', font: FONT, size: 18, bold: true, color: NAVY }),
+                ],
+                tabStops: [
+                  { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
+                ],
+              }),
+              new Paragraph({
+                spacing: { after: 80 },
+                children: [
+                  new TextRun({ text: '\t', font: FONT }),
+                  new TextRun({ text: 'Specialist Valuers \u2013 Regulated by RICS', font: FONT, size: 15, color: GREY }),
                 ],
                 tabStops: [
                   { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
@@ -887,15 +896,36 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
           default: new Footer({
             children: [
               new Paragraph({
+                spacing: { after: 0 },
                 border: {
                   top: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 4 },
                 },
                 children: [
-                  new TextRun({ text: `p: ${data.firmSettings?.phone || '+44 (0)20 8050 5060'}  `, font: FONT, size: 14, color: GREY }),
-                  new TextRun({ text: `e: ${data.firmSettings?.email || 'info@coreprop.co.uk'}  `, font: FONT, size: 14, color: GREY }),
+                  new TextRun({ text: `p: ${data.firmSettings?.phone || '+44 (0)20 8050 5060'}`, font: FONT, size: 14, color: GREY }),
+                  new TextRun({ text: '\t', font: FONT }),
+                  new TextRun({ text: 'First Floor,', font: FONT, size: 14, color: GREY }),
+                ],
+                tabStops: [
+                  { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
+                ],
+              }),
+              new Paragraph({
+                spacing: { after: 0 },
+                children: [
+                  new TextRun({ text: `e: ${data.firmSettings?.email || 'info@coreprop.co.uk'}`, font: FONT, size: 14, color: GREY }),
+                  new TextRun({ text: '\t', font: FONT }),
+                  new TextRun({ text: '4 Pentonville Road,', font: FONT, size: 14, color: GREY }),
+                ],
+                tabStops: [
+                  { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
+                ],
+              }),
+              new Paragraph({
+                spacing: { after: 0 },
+                children: [
                   new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 14, color: GREY }),
                   new TextRun({ text: '\t', font: FONT }),
-                  new TextRun({ text: data.firmSettings?.address || 'First Floor, 4 Pentonville Road, London, N1 9HF', font: FONT, size: 14, color: GREY }),
+                  new TextRun({ text: 'London, N1 9HF', font: FONT, size: 14, color: GREY }),
                 ],
                 tabStops: [
                   { type: TabStopType.RIGHT, position: TabStopPosition.MAX },

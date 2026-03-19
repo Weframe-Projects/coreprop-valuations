@@ -90,7 +90,10 @@ export async function POST(
     .eq('report_id', id)
     .single();
 
-  const structuredNotes: StructuredInspectionNotes | null = inspectionNotesRow
+  // Check for legacy inspection notes in property_details as fallback
+  const legacyNotes = ((reportRow.property_details as Record<string, unknown> | null)?.inspectionNotes as string) || '';
+
+  let structuredNotes: StructuredInspectionNotes | null = inspectionNotesRow
     ? {
         inspectionDate: inspectionNotesRow.inspection_date || '',
         inspectorInitials: inspectionNotesRow.inspector_initials || '',
@@ -108,6 +111,27 @@ export async function POST(
         extraNotes: inspectionNotesRow.extra_notes || '',
       }
     : null;
+
+  // Fallback: if no structured notes but legacy notes exist, parse them into the extra_notes field
+  if (!structuredNotes && legacyNotes.trim()) {
+    structuredNotes = {
+      inspectionDate: '',
+      inspectorInitials: '',
+      timeOfDay: 'morning',
+      weatherConditions: '',
+      descriptionNotes: '',
+      constructionNotes: '',
+      amenitiesNotes: '',
+      layoutNotes: '',
+      heatingNotes: '',
+      windowsNotes: '',
+      gardenNotes: '',
+      sizingNotes: '',
+      conditionNotes: '',
+      extraNotes: legacyNotes,
+    };
+    console.log('[generate] Using legacy inspection notes from property_details');
+  }
 
   // Load report photos with any analysis data
   const { data: reportPhotos } = await supabase
