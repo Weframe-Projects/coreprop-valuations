@@ -545,7 +545,8 @@ function buildCoverPage(data: {
 
   // Wrap everything in a single full-page table with navy cell shading
   const fullPageWidth = convertMillimetersToTwip(210);
-  const fullPageHeight = convertMillimetersToTwip(297);
+  // Slightly less than full page to avoid overflow onto a blank second page
+  const fullPageHeight = convertMillimetersToTwip(290);
   const noCellBorders = {
     top: { style: BorderStyle.NONE, size: 0, color: NAVY },
     bottom: { style: BorderStyle.NONE, size: 0, color: NAVY },
@@ -1063,8 +1064,8 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     bottom: convertMillimetersToTwip(30),
     left: convertMillimetersToTwip(25),
     right: convertMillimetersToTwip(25),
-    header: convertMillimetersToTwip(2),  // header starts near top edge
-    footer: convertMillimetersToTwip(2),  // footer starts near bottom edge
+    header: 0,  // header starts at very top edge
+    footer: 0,  // footer starts at very bottom edge
   };
 
   const doc = new Document({
