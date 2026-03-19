@@ -367,7 +367,7 @@ function buildCoverPageContent(data: {
     <div class="cover-page">
       <div class="cover-content">
         <div class="cover-brand">
-          <img src="${getCorepropLogoDataUrl()}" alt="The CoreProp Group" style="height: 90px;" />
+          <img src="${getCorepropLogoDataUrl()}" alt="The CoreProp Group" style="height: 110px;" />
         </div>
         <div class="cover-report-type">${escapeHTML(reportTypeDisplay)}</div>
         <div class="cover-details">
@@ -433,6 +433,7 @@ function getCoverStyles(): string {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 210mm;
+      overflow: hidden;
       font-family: Arial, Helvetica, sans-serif;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
@@ -441,17 +442,14 @@ function getCoverStyles(): string {
       width: 210mm; min-height: 297mm;
       background: #1a2e3b;
       display: flex; flex-direction: column; justify-content: space-between;
-      padding: 40mm 30mm 20mm;
+      padding: 30mm 30mm 20mm;
     }
-    .cover-content { color: #fff; flex: 1; display: flex; flex-direction: column; justify-content: center; }
-    .cover-brand { margin-bottom: 12px; }
-    .brand-the { color: #c49a6c; font-size: 18pt; font-weight: 300; display: block; line-height: 1.1; }
-    .brand-name { color: #ffffff; font-size: 28pt; font-weight: 700; display: block; line-height: 1.1; }
-    .brand-group { color: #c49a6c; font-size: 18pt; font-weight: 300; display: block; line-height: 1.1; }
-    .cover-report-type { font-size: 16pt; font-weight: 700; color: #fff; margin-top: 30px; letter-spacing: 0.5px; }
-    .cover-details { margin-top: 30px; }
+    .cover-content { color: #fff; }
+    .cover-brand { margin-bottom: 20px; }
+    .cover-report-type { font-size: 18pt; font-weight: 400; color: #fff; margin-top: 30px; letter-spacing: 0.3px; }
+    .cover-details { margin-top: 24px; }
     .cover-detail { font-size: 11pt; color: #e0e0e0; margin-bottom: 4px; line-height: 1.5; }
-    .cover-ref { margin-top: 24px; font-size: 10.5pt; color: #c49a6c; }
+    .cover-ref { margin-top: 20px; font-size: 10.5pt; color: #c49a6c; }
     .cover-date { font-size: 10.5pt; color: #c49a6c; }
     .cover-footer {
       display: flex; justify-content: space-between; align-items: flex-end;
@@ -469,6 +467,7 @@ function getBackCoverStyles(): string {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 210mm;
+      overflow: hidden;
       font-family: Arial, Helvetica, sans-serif;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
@@ -502,6 +501,7 @@ function getContentStyles(): string {
 
     html, body {
       width: 210mm;
+      overflow-x: hidden;
       font-family: Arial, Helvetica, sans-serif;
       font-size: 10.5pt;
       line-height: 1.6;
