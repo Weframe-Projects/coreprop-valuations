@@ -443,192 +443,141 @@ function buildCoverPage(data: {
 
   const reportTypeDisplay = getReportTypeDisplay(reportType);
 
-  const elements: Paragraph[] = [];
-
-  // Dark navy shading applied to every paragraph on the cover
-  // ShadingType.CLEAR with fill = simple solid background color
-  const navyShading = { type: ShadingType.CLEAR, fill: NAVY } as const;
-  // Cover uses tiny margins (5mm) so shading fills edge-to-edge.
-  // Text content gets left indent of 20mm for padding from the edge.
-  const coverTextIndent = convertMillimetersToTwip(20);
+  // Build all cover content as paragraphs inside ONE table cell with navy shading.
+  // This is the only way to get a true full-page background color in Word.
+  const cellChildren: Paragraph[] = [];
+  const navyCellShading = { type: ShadingType.CLEAR, fill: NAVY };
 
   // Spacing at top
-  elements.push(new Paragraph({
-    spacing: { after: 1600 },
-    shading: navyShading,
-    indent: { left: coverTextIndent },
-    children: [new TextRun({ text: ' ', font: FONT, size: 4, color: NAVY })],
-  }));
+  cellChildren.push(new Paragraph({ spacing: { after: 1600 }, children: [new TextRun({ text: ' ', font: FONT, size: 4, color: NAVY })] }));
 
-  // Brand logo (actual image, not text)
+  // Brand logo
   const coverLogoBuf = getCorepropLogoBuffer();
   if (coverLogoBuf) {
-    elements.push(
+    cellChildren.push(
       new Paragraph({
         spacing: { after: 600 },
-        shading: navyShading,
-        indent: { left: coverTextIndent },
         children: [
-          new ImageRun({
-            data: coverLogoBuf,
-            transformation: { width: 180, height: 132 },
-            type: 'png',
-          }),
+          new ImageRun({ data: coverLogoBuf, transformation: { width: 180, height: 132 }, type: 'png' }),
         ],
       }),
     );
   } else {
-    elements.push(
-      new Paragraph({ shading: navyShading, indent: { left: coverTextIndent }, children: [new TextRun({ text: 'The', font: FONT, size: 36, color: GOLD })] }),
-      new Paragraph({ shading: navyShading, indent: { left: coverTextIndent }, children: [new TextRun({ text: 'CoreProp', font: FONT, size: 56, bold: true, color: 'FFFFFF' })] }),
-      new Paragraph({ spacing: { after: 600 }, shading: navyShading, indent: { left: coverTextIndent }, children: [new TextRun({ text: 'Group', font: FONT, size: 36, color: GOLD })] }),
+    cellChildren.push(
+      new Paragraph({ children: [new TextRun({ text: 'The', font: FONT, size: 36, color: GOLD })] }),
+      new Paragraph({ children: [new TextRun({ text: 'CoreProp', font: FONT, size: 56, bold: true, color: 'FFFFFF' })] }),
+      new Paragraph({ spacing: { after: 600 }, children: [new TextRun({ text: 'Group', font: FONT, size: 36, color: GOLD })] }),
     );
   }
 
-  // Report type (white on dark navy)
-  elements.push(
+  // Report type
+  cellChildren.push(
     new Paragraph({
       spacing: { after: 600 },
-      shading: navyShading,
-      indent: { left: coverTextIndent },
-      children: [
-        new TextRun({
-          text: reportTypeDisplay,
-          font: FONT,
-          size: 32,
-          color: 'FFFFFF',
-        }),
-      ],
+      children: [new TextRun({ text: reportTypeDisplay, font: FONT, size: 32, color: 'FFFFFF' })],
     }),
   );
 
-  // Property address (light grey on dark navy)
-  elements.push(
+  // Property address
+  cellChildren.push(
     new Paragraph({
       spacing: { after: 80 },
-      shading: navyShading,
-      indent: { left: coverTextIndent },
-      children: [
-        new TextRun({
-          text: `Valuation advice on ${propertyAddress} ('the Property')`,
-          font: FONT,
-          size: 22,
-          color: 'E0E0E0',
-        }),
-      ],
+      children: [new TextRun({ text: `Valuation advice on ${propertyAddress} ('the Property')`, font: FONT, size: 22, color: 'E0E0E0' })],
     }),
   );
 
-  // Client / Estate line (light grey on dark navy)
+  // Client / Estate line
   if (isIHTType(reportType) && deceasedName) {
-    elements.push(
+    cellChildren.push(
       new Paragraph({
         spacing: { after: 80 },
-        shading: navyShading,
-        indent: { left: coverTextIndent },
-        children: [
-          new TextRun({
-            text: `On behalf of the Estate of the late ${deceasedName} c/o ${clientName}`,
-            font: FONT,
-            size: 22,
-            color: 'E0E0E0',
-          }),
-        ],
+        children: [new TextRun({ text: `On behalf of the Estate of the late ${deceasedName} c/o ${clientName}`, font: FONT, size: 22, color: 'E0E0E0' })],
       }),
     );
     if (dateOfDeath) {
-      elements.push(
+      cellChildren.push(
         new Paragraph({
           spacing: { after: 80 },
-          shading: navyShading,
-          indent: { left: coverTextIndent },
-          children: [
-            new TextRun({
-              text: `Date of death \u2013 ${formatDateLong(dateOfDeath)}`,
-              font: FONT,
-              size: 22,
-              color: 'E0E0E0',
-            }),
-          ],
+          children: [new TextRun({ text: `Date of death \u2013 ${formatDateLong(dateOfDeath)}`, font: FONT, size: 22, color: 'E0E0E0' })],
         }),
       );
     }
   } else {
-    elements.push(
+    cellChildren.push(
       new Paragraph({
         spacing: { after: 80 },
-        shading: navyShading,
-        indent: { left: coverTextIndent },
-        children: [
-          new TextRun({
-            text: `On behalf of ${clientName}`,
-            font: FONT,
-            size: 22,
-            color: 'E0E0E0',
-          }),
-        ],
+        children: [new TextRun({ text: `On behalf of ${clientName}`, font: FONT, size: 22, color: 'E0E0E0' })],
       }),
     );
   }
 
-  // Reference and date (gold on dark navy)
-  elements.push(
+  // Reference and date
+  cellChildren.push(
     new Paragraph({
       spacing: { before: 400, after: 40 },
-      shading: navyShading,
-      indent: { left: coverTextIndent },
-      children: [
-        new TextRun({ text: `Our ref: ${referenceNumber}`, font: FONT, size: FONT_SIZE, color: GOLD }),
-      ],
+      children: [new TextRun({ text: `Our ref: ${referenceNumber}`, font: FONT, size: FONT_SIZE, color: GOLD })],
     }),
     new Paragraph({
       spacing: { after: 200 },
-      shading: navyShading,
-      indent: { left: coverTextIndent },
-      children: [
-        new TextRun({ text: formatDateLong(valuationDate), font: FONT, size: FONT_SIZE, color: GOLD }),
-      ],
+      children: [new TextRun({ text: formatDateLong(valuationDate), font: FONT, size: FONT_SIZE, color: GOLD })],
     }),
   );
 
-  // Fill remaining page with navy background spacers (no indent needed, just fills)
+  // Spacers to push footer to bottom
   for (let i = 0; i < 12; i++) {
-    elements.push(new Paragraph({ shading: navyShading, children: [new TextRun({ text: ' ', font: FONT, size: 4, color: NAVY })] }));
+    cellChildren.push(new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: ' ', font: FONT, size: 4, color: NAVY })] }));
   }
 
-  // Cover footer: contact info at bottom
-  elements.push(
+  // Contact info at bottom
+  cellChildren.push(
     new Paragraph({
-      shading: navyShading,
       border: { top: { style: BorderStyle.SINGLE, size: 1, color: '3a5a6b', space: 4 } },
       spacing: { after: 0 },
-      indent: { left: coverTextIndent },
       children: [
         new TextRun({ text: 'p: +44 (0)20 8050 5060', font: FONT, size: 14, color: 'C0C0C0' }),
-        new TextRun({ text: '\t', font: FONT }),
+        new TextRun({ text: '    ', font: FONT, size: 14 }),
         new TextRun({ text: 'First Floor, 4 Pentonville Road, London, N1 9HF', font: FONT, size: 14, color: 'C0C0C0' }),
       ],
-      tabStops: [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }],
     }),
-    new Paragraph({
-      shading: navyShading,
-      spacing: { after: 0 },
-      indent: { left: coverTextIndent },
-      children: [
-        new TextRun({ text: 'e: info@coreprop.co.uk', font: FONT, size: 14, color: 'C0C0C0' }),
-      ],
-    }),
-    new Paragraph({
-      shading: navyShading,
-      spacing: { after: 0 },
-      indent: { left: coverTextIndent },
-      children: [
-        new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 14, color: 'C0C0C0' }),
-      ],
-    }),
+    new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: 'e: info@coreprop.co.uk', font: FONT, size: 14, color: 'C0C0C0' })] }),
+    new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 14, color: 'C0C0C0' })] }),
   );
 
-  return elements;
+  // Wrap everything in a single full-page table with navy cell shading
+  const fullPageWidth = convertMillimetersToTwip(210);
+  const fullPageHeight = convertMillimetersToTwip(297);
+  const noCellBorders = {
+    top: { style: BorderStyle.NONE, size: 0, color: NAVY },
+    bottom: { style: BorderStyle.NONE, size: 0, color: NAVY },
+    left: { style: BorderStyle.NONE, size: 0, color: NAVY },
+    right: { style: BorderStyle.NONE, size: 0, color: NAVY },
+  };
+
+  const coverTable = new Table({
+    width: { size: fullPageWidth, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    rows: [
+      new TableRow({
+        height: { value: fullPageHeight, rule: HeightRule.ATLEAST },
+        children: [
+          new TableCell({
+            shading: navyCellShading,
+            borders: noCellBorders,
+            width: { size: fullPageWidth, type: WidthType.DXA },
+            margins: {
+              top: convertMillimetersToTwip(15),
+              bottom: convertMillimetersToTwip(10),
+              left: convertMillimetersToTwip(25),
+              right: convertMillimetersToTwip(25),
+            },
+            children: cellChildren,
+          }),
+        ],
+      }),
+    ],
+  });
+
+  return [coverTable] as unknown as Paragraph[];
 }
 
 function getReportTypeDisplay(reportType: ReportType): string {
@@ -1141,17 +1090,12 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
       },
     },
     sections: [
-      // Section 1: Cover page — no header or footer, near-zero margins for full-bleed navy
+      // Section 1: Cover page — no header/footer, zero margins (table handles padding)
       {
         properties: {
           page: {
             size: pageSize,
-            margin: {
-              top: convertMillimetersToTwip(2),
-              bottom: convertMillimetersToTwip(2),
-              left: convertMillimetersToTwip(2),
-              right: convertMillimetersToTwip(2),
-            },
+            margin: { top: 0, bottom: 0, left: 0, right: 0 },
           },
         },
         children: coverChildren as unknown as (Paragraph | Table)[],
