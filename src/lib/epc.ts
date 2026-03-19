@@ -36,35 +36,54 @@ async function epcFetch(path: string, params?: Record<string, string>): Promise<
     }
   }
 
-  let response: Response;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
-    response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': getAuthHeader(),
-      },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('EPC API request timed out after 10 seconds');
+  // Retry up to 2 times with exponential backoff
+  const maxRetries = 2;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': getAuthHeader(),
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        // Retry on 5xx errors or rate limiting
+        if (attempt < maxRetries && (response.status >= 500 || response.status === 429)) {
+          console.warn(`[epc] Retrying (attempt ${attempt + 1}/${maxRetries}) after HTTP ${response.status}`);
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        throw new Error(`EPC API returned HTTP ${response.status}: ${errorText}`);
+      }
+
+      return response;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        if (attempt < maxRetries) {
+          console.warn(`[epc] Retrying (attempt ${attempt + 1}/${maxRetries}) after timeout`);
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        throw new Error('EPC API request timed out after 15 seconds (all retries exhausted)');
+      }
+      if (attempt < maxRetries) {
+        console.warn(`[epc] Retrying (attempt ${attempt + 1}/${maxRetries}) after error`);
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`EPC API request failed: ${message}`);
     }
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`EPC API request failed: ${message}`);
   }
 
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error');
-    throw new Error(
-      `EPC API returned HTTP ${response.status}: ${errorText}`,
-    );
-  }
-
-  return response;
+  throw new Error('EPC API request failed after all retries');
 }
 
 // --- API response row type (kebab-case field names from the API) ---

@@ -20,6 +20,8 @@ export default function DashboardPage() {
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 12;
 
   async function loadReports(searchTerm = '') {
     setLoading(true);
@@ -73,7 +75,7 @@ export default function DashboardPage() {
         <input
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder="Search by address, postcode, or reference..."
           className="w-full max-w-md px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#c49a6c] focus:border-transparent outline-none text-sm text-gray-900"
         />
@@ -107,21 +109,44 @@ export default function DashboardPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {reports.map((report) => (
-            <ReportCard
-              key={report.id}
-              id={report.id}
-              status={report.status}
-              reportType={report.report_type}
-              propertyAddress={report.property_address}
-              postcode={report.postcode}
-              valuationFigure={report.valuation_figure}
-              updatedAt={report.updated_at}
-              onDelete={handleDelete}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {reports.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((report) => (
+              <ReportCard
+                key={report.id}
+                id={report.id}
+                status={report.status}
+                reportType={report.report_type}
+                propertyAddress={report.property_address}
+                postcode={report.postcode}
+                valuationFigure={report.valuation_figure}
+                updatedAt={report.updated_at}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+          {reports.length > PAGE_SIZE && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-gray-600">
+                Page {page} of {Math.ceil(reports.length / PAGE_SIZE)}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(Math.ceil(reports.length / PAGE_SIZE), p + 1))}
+                disabled={page >= Math.ceil(reports.length / PAGE_SIZE)}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
       )}
     </AppShell>
   );

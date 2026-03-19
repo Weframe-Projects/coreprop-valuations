@@ -231,21 +231,33 @@ export default function ReportEditorPage() {
     updateReport(updates);
   }, [updateReport]);
 
-  // Regenerate pipeline
+  // Regenerate pipeline (with 2-minute timeout)
   const handleRegenerate = async () => {
     setGenerating(true);
     try {
       await fetch(`/api/reports/${id}/generate`, { method: 'POST' });
-      // Poll for results
+      let elapsed = 0;
       const poll = setInterval(async () => {
-        const res = await fetch(`/api/reports/${id}`);
-        if (res.ok) {
-          const data = await res.json();
-          setReport(data);
-          if (data.status === 'review') {
-            setGenerating(false);
-            clearInterval(poll);
+        elapsed += 3000;
+        if (elapsed > 120_000) {
+          // 2-minute timeout
+          setGenerating(false);
+          clearInterval(poll);
+          alert('Report generation is taking longer than expected. The report may still be processing — please refresh the page in a minute.');
+          return;
+        }
+        try {
+          const res = await fetch(`/api/reports/${id}`);
+          if (res.ok) {
+            const data = await res.json();
+            setReport(data);
+            if (data.status === 'review') {
+              setGenerating(false);
+              clearInterval(poll);
+            }
           }
+        } catch {
+          // Network error during poll — keep trying
         }
       }, 3000);
       pollTimer.current = poll;
@@ -408,7 +420,7 @@ export default function ReportEditorPage() {
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'sections', label: 'Report Sections', count: Object.keys(sections).length },
     { key: 'comparables', label: 'Comparables', count: comparables.length },
-    { key: 'data', label: 'Property Data' },
+    { key: 'data', label: 'Inspection Notes' },
   ];
 
   return (
@@ -725,8 +737,48 @@ export default function ReportEditorPage() {
               onChange={handleValuationChange}
             />
 
+            {/* Pre-flight checks */}
+            {(() => {
+              const warnings: string[] = [];
+              const emptySections = visibleSections.filter(s => {
+                const text = sections[s.key] || '';
+                return !text && s.key !== 'section_19_auction_reserve';
+              });
+              if (emptySections.length > 0) {
+                warnings.push(`${emptySections.length} section(s) have no content: ${emptySections.slice(0, 3).map(s => s.title).join(', ')}${emptySections.length > 3 ? '...' : ''}`);
+              }
+              const allText = Object.values(sections).join(' ');
+              const hasPlaceholders = /\[(?:Title Number|Client Name|Deceased Name|Date|Local Authority)\]/i.test(allText)
+                || /\{\{[A-Z_]+\}\}/.test(allText);
+              if (hasPlaceholders) {
+                warnings.push('Some sections still contain placeholder text (shown in red) that needs to be filled in');
+              }
+              if (!report.valuation_figure_words) {
+                warnings.push('Valuation figure in words is empty');
+              }
+              if (!report.land_registry_title || report.land_registry_title === '[Title Number]') {
+                warnings.push('Land Registry title number is missing');
+              }
+              if (warnings.length === 0) return null;
+              return (
+                <div className="mt-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+                  <div className="flex items-start gap-2">
+                    <svg className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-semibold text-amber-800">Review before generating</p>
+                      <ul className="mt-1 text-sm text-amber-700 list-disc list-inside space-y-0.5">
+                        {warnings.map((w, i) => <li key={i}>{w}</li>)}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Document generation buttons at bottom */}
-            <div className="mt-8 mb-4 flex flex-col sm:flex-row gap-3">
+            <div className="mt-4 mb-4 flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
                 onClick={handleGeneratePdf}

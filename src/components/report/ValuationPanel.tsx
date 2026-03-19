@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { Comparable } from '@/lib/types';
+import { numberToWords } from '@/lib/number-to-words';
 
 function formatCurrency(value: string): string {
   const digits = value.replace(/[^0-9]/g, '');
@@ -110,13 +111,25 @@ export default function ValuationPanel({
           {/* Market Value in Words */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">Market Value in Words</label>
-            <input
-              type="text"
-              value={valuationFigureWords}
-              onChange={(e) => onChange({ valuation_figure_words: e.target.value })}
-              placeholder="e.g., Five Hundred and Thirty Thousand Pounds"
-              className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900 focus:border-[#c49a6c] focus:outline-none focus:ring-2 focus:ring-[#c49a6c]/20"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={valuationFigureWords}
+                onChange={(e) => onChange({ valuation_figure_words: e.target.value })}
+                placeholder="e.g., Five Hundred and Thirty Thousand Pounds"
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900 focus:border-[#c49a6c] focus:outline-none focus:ring-2 focus:ring-[#c49a6c]/20"
+              />
+              {valuationFigure != null && valuationFigure > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onChange({ valuation_figure_words: numberToWords(valuationFigure) })}
+                  className="shrink-0 rounded-lg border border-[#c49a6c] bg-[#faf7f3] px-3 py-2 text-xs font-medium text-[#c49a6c] hover:bg-[#c49a6c] hover:text-white transition-colors"
+                  title="Auto-generate from number"
+                >
+                  Auto
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Deviation warning */}
@@ -163,13 +176,25 @@ export default function ValuationPanel({
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">Auction Reserve in Words</label>
-                <input
-                  type="text"
-                  value={auctionReserveWords}
-                  onChange={(e) => onChange({ auction_reserve_words: e.target.value })}
-                  placeholder="e.g., Five Hundred Thousand Pounds"
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900 focus:border-[#c49a6c] focus:outline-none focus:ring-2 focus:ring-[#c49a6c]/20"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={auctionReserveWords}
+                    onChange={(e) => onChange({ auction_reserve_words: e.target.value })}
+                    placeholder="e.g., Five Hundred Thousand Pounds"
+                    className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900 focus:border-[#c49a6c] focus:outline-none focus:ring-2 focus:ring-[#c49a6c]/20"
+                  />
+                  {auctionReserve != null && auctionReserve > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onChange({ auction_reserve_words: numberToWords(auctionReserve) })}
+                      className="shrink-0 rounded-lg border border-[#c49a6c] bg-[#faf7f3] px-3 py-2 text-xs font-medium text-[#c49a6c] hover:bg-[#c49a6c] hover:text-white transition-colors"
+                      title="Auto-generate from number"
+                    >
+                      Auto
+                    </button>
+                  )}
+                </div>
               </div>
             </>
           )}
