@@ -527,15 +527,35 @@ function getContentStyles(): string {
     }
     .header-banner {
       background: #1a2e3b;
-      min-height: 28mm;
-      padding: 5mm 25.4mm;
+      padding: 8mm 25.4mm 6mm;
       display: flex;
       justify-content: space-between;
       align-items: center;
       width: 210mm;
     }
-    .header-brand img { height: 20mm; }
-    .header-rics img { height: 15mm; width: auto; }
+    .header-brand img { height: 18mm; }
+    .header-right { text-align: right; }
+    .header-right .h-cs {
+      color: #ffffff;
+      font-size: 11pt;
+      font-weight: 700;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .header-right .h-sv {
+      color: #c0c0c0;
+      font-size: 8pt;
+      font-family: Arial, Helvetica, sans-serif;
+      margin-top: 2px;
+    }
+    .header-address-bar {
+      padding: 4mm 25.4mm 0;
+    }
+    .header-address-bar .h-addr {
+      font-size: 9pt;
+      color: #8b7355;
+      padding-bottom: 3mm;
+      border-bottom: 1.5px solid #1a2e3b;
+    }
 
     /* Footer uses position:fixed to repeat on every printed page */
     .fixed-footer {
@@ -1180,9 +1200,13 @@ export function buildContentHTML(data: {
       <div class="header-brand">
         <img src="${getCorepropLogoDataUrl()}" alt="The CoreProp Group" />
       </div>
-      <div class="header-rics">
-        <img src="${getRicsLogoWhiteDataUrl()}" alt="Regulated by RICS" />
+      <div class="header-right">
+        <div class="h-cs">Chartered Surveyors</div>
+        <div class="h-sv">Specialist Valuers &ndash; Regulated by RICS</div>
       </div>
+    </div>
+    <div class="header-address-bar">
+      <div class="h-addr">${escapeHTML(propertyAddress)}</div>
     </div>`;
 
   // --- Build the repeating footer HTML (appears as fixed div) ---
