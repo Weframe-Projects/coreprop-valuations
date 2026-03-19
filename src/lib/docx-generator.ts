@@ -23,7 +23,10 @@ import {
   Footer,
   TabStopPosition,
   TabStopType,
+  SectionType,
 } from 'docx';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 import type {
   ReportType,
@@ -49,6 +52,29 @@ const NAVY = '1a2e3b';
 const GOLD = 'c49a6c';
 const GREY = '555555';
 const LIGHT_BG = 'f4f1ec';
+
+// --- Logo buffer helpers ---
+
+function loadLogoBuffer(filename: string): Buffer | null {
+  try {
+    return readFileSync(join(process.cwd(), 'public', filename));
+  } catch {
+    return null;
+  }
+}
+
+let _corepropLogoBuf: Buffer | null | undefined;
+let _ricsLogoBuf: Buffer | null | undefined;
+
+function getCorepropLogoBuffer(): Buffer | null {
+  if (_corepropLogoBuf === undefined) _corepropLogoBuf = loadLogoBuffer('coreprop-logo.png');
+  return _corepropLogoBuf;
+}
+
+function getRicsLogoBuffer(): Buffer | null {
+  if (_ricsLogoBuf === undefined) _ricsLogoBuf = loadLogoBuffer('rics-logo-gold.png');
+  return _ricsLogoBuf;
+}
 
 // --- Helpers ---
 
@@ -531,8 +557,7 @@ function buildCoverPage(data: {
     }),
   );
 
-  // Page break after cover
-  elements.push(new Paragraph({ children: [new PageBreak()] }));
+  // No page break needed — section break handles this
 
   return elements;
 }
@@ -653,20 +678,19 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
 
   // --- Build all document children ---
 
-  const children: Paragraph[] = [];
+  // ===== COVER PAGE (Section 1 — no header/footer) =====
+  const coverChildren: Paragraph[] = buildCoverPage({
+    reportType,
+    propertyAddress,
+    clientName: clientDetails.clientName,
+    deceasedName: clientDetails.deceasedName,
+    dateOfDeath: clientDetails.dateOfDeath,
+    referenceNumber,
+    valuationDate: clientDetails.valuationDate,
+  });
 
-  // ===== COVER PAGE =====
-  children.push(
-    ...buildCoverPage({
-      reportType,
-      propertyAddress,
-      clientName: clientDetails.clientName,
-      deceasedName: clientDetails.deceasedName,
-      dateOfDeath: clientDetails.dateOfDeath,
-      referenceNumber,
-      valuationDate: clientDetails.valuationDate,
-    }),
-  );
+  // ===== CONTENT PAGES (Section 2 — branded header/footer) =====
+  const children: Paragraph[] = [];
 
   // ===== NUMBERED SECTIONS 1-4 (Template) =====
   children.push(
@@ -831,7 +855,138 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     );
   }
 
-  // ===== BUILD DOCUMENT =====
+  // ===== BUILD DOCUMENT (two sections) =====
+
+  // Load logo buffers for header/footer
+  const corepropLogoBuf = getCorepropLogoBuffer();
+  const ricsLogoBuf = getRicsLogoBuffer();
+
+  // Header children: CoreProp logo left + "Chartered Surveyors" right
+  const headerChildren: Paragraph[] = [];
+
+  // Row 1: Logo + Chartered Surveyors
+  const headerRow1Children: (TextRun | ImageRun)[] = [];
+  if (corepropLogoBuf) {
+    headerRow1Children.push(
+      new ImageRun({
+        data: corepropLogoBuf,
+        transformation: { width: 120, height: 50 },
+        type: 'png',
+      }),
+    );
+  } else {
+    headerRow1Children.push(
+      new TextRun({ text: 'The ', font: FONT, size: 16, color: GOLD }),
+      new TextRun({ text: 'CoreProp ', font: FONT, size: 20, bold: true, color: NAVY }),
+      new TextRun({ text: 'Group', font: FONT, size: 16, color: GOLD }),
+    );
+  }
+  headerRow1Children.push(
+    new TextRun({ text: '\t', font: FONT }),
+    new TextRun({ text: 'Chartered Surveyors', font: FONT, size: 18, bold: true, color: NAVY }),
+  );
+
+  headerChildren.push(
+    new Paragraph({
+      spacing: { after: 0 },
+      children: headerRow1Children,
+      tabStops: [
+        { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 80 },
+      children: [
+        new TextRun({ text: '\t', font: FONT }),
+        new TextRun({ text: 'Specialist Valuers \u2013 Regulated by RICS', font: FONT, size: 15, color: GREY }),
+      ],
+      tabStops: [
+        { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 40 },
+      border: {
+        bottom: { style: BorderStyle.SINGLE, size: 3, color: NAVY, space: 4 },
+      },
+      children: [
+        new TextRun({ text: propertyAddress, font: FONT, size: 18, color: GOLD }),
+      ],
+    }),
+  );
+
+  // Footer children: contact info left, address middle, RICS logo right
+  const footerRow1Children: (TextRun | ImageRun)[] = [
+    new TextRun({ text: `p: ${data.firmSettings?.phone || '+44 (0)20 8050 5060'}`, font: FONT, size: 14, color: GREY }),
+    new TextRun({ text: '\t', font: FONT }),
+    new TextRun({ text: 'First Floor,', font: FONT, size: 14, color: GREY }),
+    new TextRun({ text: '\t', font: FONT }),
+  ];
+  const footerRow2Children: (TextRun | ImageRun)[] = [
+    new TextRun({ text: `e: ${data.firmSettings?.email || 'info@coreprop.co.uk'}`, font: FONT, size: 14, color: GREY }),
+    new TextRun({ text: '\t', font: FONT }),
+    new TextRun({ text: '4 Pentonville Road,', font: FONT, size: 14, color: GREY }),
+  ];
+  const footerRow3Children: (TextRun | ImageRun)[] = [
+    new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 14, color: GREY }),
+    new TextRun({ text: '\t', font: FONT }),
+    new TextRun({ text: 'London, N1 9HF', font: FONT, size: 14, color: GREY }),
+  ];
+
+  // RICS logo in footer (right side of first row)
+  if (ricsLogoBuf) {
+    footerRow1Children.push(
+      new ImageRun({
+        data: ricsLogoBuf,
+        transformation: { width: 75, height: 35 },
+        type: 'png',
+        floating: {
+          horizontalPosition: { relative: 'margin', align: 'right' },
+          verticalPosition: { relative: 'paragraph', offset: 0 },
+          wrap: { type: 1, side: 'left' },
+        },
+      }),
+    );
+  }
+
+  const footerChildren: Paragraph[] = [
+    new Paragraph({
+      spacing: { after: 0 },
+      border: {
+        top: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 4 },
+      },
+      children: footerRow1Children,
+      tabStops: [
+        { type: TabStopType.CENTER, position: Math.round(TabStopPosition.MAX / 2) },
+        { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 0 },
+      children: footerRow2Children,
+      tabStops: [
+        { type: TabStopType.CENTER, position: Math.round(TabStopPosition.MAX / 2) },
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 0 },
+      children: footerRow3Children,
+      tabStops: [
+        { type: TabStopType.CENTER, position: Math.round(TabStopPosition.MAX / 2) },
+      ],
+    }),
+  ];
+
+  const pageSize = {
+    width: convertMillimetersToTwip(210),
+    height: convertMillimetersToTwip(297),
+  };
+  const pageMargins = {
+    top: convertMillimetersToTwip(20),
+    bottom: convertMillimetersToTwip(22),
+    left: convertMillimetersToTwip(25),
+    right: convertMillimetersToTwip(25),
+  };
 
   const doc = new Document({
     styles: {
@@ -843,100 +998,24 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
       },
     },
     sections: [
+      // Section 1: Cover page — no header or footer
       {
         properties: {
-          page: {
-            size: {
-              width: convertMillimetersToTwip(210),
-              height: convertMillimetersToTwip(297),
-            },
-            margin: {
-              top: convertMillimetersToTwip(20),
-              bottom: convertMillimetersToTwip(20),
-              left: convertMillimetersToTwip(25),
-              right: convertMillimetersToTwip(25),
-            },
-          },
+          page: { size: pageSize, margin: pageMargins },
+        },
+        children: coverChildren as unknown as (Paragraph | Table)[],
+      },
+      // Section 2: Content pages — branded header & footer
+      {
+        properties: {
+          type: SectionType.NEXT_PAGE,
+          page: { size: pageSize, margin: pageMargins },
         },
         headers: {
-          default: new Header({
-            children: [
-              new Paragraph({
-                spacing: { after: 0 },
-                children: [
-                  new TextRun({ text: 'The ', font: FONT, size: 16, color: GOLD }),
-                  new TextRun({ text: 'CoreProp ', font: FONT, size: 20, bold: true, color: NAVY }),
-                  new TextRun({ text: 'Group', font: FONT, size: 16, color: GOLD }),
-                  new TextRun({ text: '\t', font: FONT }),
-                  new TextRun({ text: 'Chartered Surveyors', font: FONT, size: 18, bold: true, color: NAVY }),
-                ],
-                tabStops: [
-                  { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
-                ],
-              }),
-              new Paragraph({
-                spacing: { after: 80 },
-                children: [
-                  new TextRun({ text: '\t', font: FONT }),
-                  new TextRun({ text: 'Specialist Valuers \u2013 Regulated by RICS', font: FONT, size: 15, color: GREY }),
-                ],
-                tabStops: [
-                  { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
-                ],
-              }),
-              new Paragraph({
-                spacing: { after: 40 },
-                border: {
-                  bottom: { style: BorderStyle.SINGLE, size: 3, color: NAVY, space: 4 },
-                },
-                children: [
-                  new TextRun({ text: propertyAddress, font: FONT, size: 18, color: GOLD }),
-                ],
-              }),
-            ],
-          }),
+          default: new Header({ children: headerChildren }),
         },
         footers: {
-          default: new Footer({
-            children: [
-              new Paragraph({
-                spacing: { after: 0 },
-                border: {
-                  top: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 4 },
-                },
-                children: [
-                  new TextRun({ text: `p: ${data.firmSettings?.phone || '+44 (0)20 8050 5060'}`, font: FONT, size: 14, color: GREY }),
-                  new TextRun({ text: '\t', font: FONT }),
-                  new TextRun({ text: 'First Floor,', font: FONT, size: 14, color: GREY }),
-                ],
-                tabStops: [
-                  { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
-                ],
-              }),
-              new Paragraph({
-                spacing: { after: 0 },
-                children: [
-                  new TextRun({ text: `e: ${data.firmSettings?.email || 'info@coreprop.co.uk'}`, font: FONT, size: 14, color: GREY }),
-                  new TextRun({ text: '\t', font: FONT }),
-                  new TextRun({ text: '4 Pentonville Road,', font: FONT, size: 14, color: GREY }),
-                ],
-                tabStops: [
-                  { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
-                ],
-              }),
-              new Paragraph({
-                spacing: { after: 0 },
-                children: [
-                  new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 14, color: GREY }),
-                  new TextRun({ text: '\t', font: FONT }),
-                  new TextRun({ text: 'London, N1 9HF', font: FONT, size: 14, color: GREY }),
-                ],
-                tabStops: [
-                  { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
-                ],
-              }),
-            ],
-          }),
+          default: new Footer({ children: footerChildren }),
         },
         children: children as unknown as (Paragraph | Table)[],
       },
