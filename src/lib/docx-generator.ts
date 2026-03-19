@@ -545,8 +545,8 @@ function buildCoverPage(data: {
 
   // Wrap everything in a single full-page table with navy cell shading
   const fullPageWidth = convertMillimetersToTwip(210);
-  // Slightly less than full page to avoid overflow onto a blank second page
-  const fullPageHeight = convertMillimetersToTwip(290);
+  // Row height: page height minus cell top/bottom margins to fit exactly on one page
+  const coverRowHeight = convertMillimetersToTwip(297 - 15 - 10);
   const noCellBorders = {
     top: { style: BorderStyle.NONE, size: 0, color: NAVY },
     bottom: { style: BorderStyle.NONE, size: 0, color: NAVY },
@@ -559,7 +559,7 @@ function buildCoverPage(data: {
     layout: TableLayoutType.FIXED,
     rows: [
       new TableRow({
-        height: { value: fullPageHeight, rule: HeightRule.ATLEAST },
+        height: { value: coverRowHeight, rule: HeightRule.EXACT },
         children: [
           new TableCell({
             shading: navyCellShading,
