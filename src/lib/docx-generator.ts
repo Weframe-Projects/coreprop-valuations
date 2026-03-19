@@ -448,8 +448,8 @@ function buildCoverPage(data: {
   const cellChildren: Paragraph[] = [];
   const navyCellShading = { type: ShadingType.CLEAR, fill: NAVY };
 
-  // Spacing at top
-  cellChildren.push(new Paragraph({ spacing: { after: 1600 }, children: [new TextRun({ text: ' ', font: FONT, size: 4, color: NAVY })] }));
+  // Spacing at top (empty paragraph, no visible characters)
+  cellChildren.push(new Paragraph({ spacing: { after: 1600 }, children: [] }));
 
   // Brand logo
   const coverLogoBuf = getCorepropLogoBuffer();
@@ -523,25 +523,7 @@ function buildCoverPage(data: {
     }),
   );
 
-  // Spacers to push contact info toward bottom (fewer, larger gaps)
-  for (let i = 0; i < 6; i++) {
-    cellChildren.push(new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: ' ', font: FONT, size: 4, color: NAVY })] }));
-  }
-
-  // Contact info at bottom
-  cellChildren.push(
-    new Paragraph({
-      border: { top: { style: BorderStyle.SINGLE, size: 1, color: '3a5a6b', space: 4 } },
-      spacing: { after: 0 },
-      children: [
-        new TextRun({ text: 'p: +44 (0)20 8050 5060', font: FONT, size: 14, color: 'C0C0C0' }),
-        new TextRun({ text: '    ', font: FONT, size: 14 }),
-        new TextRun({ text: 'First Floor, 4 Pentonville Road, London, N1 9HF', font: FONT, size: 14, color: 'C0C0C0' }),
-      ],
-    }),
-    new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: 'e: info@coreprop.co.uk', font: FONT, size: 14, color: 'C0C0C0' })] }),
-    new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 14, color: 'C0C0C0' })] }),
-  );
+  // No footer/contact info on cover page (user requirement)
 
   // Wrap everything in a single full-page table with navy cell shading
   const fullPageWidth = convertMillimetersToTwip(210);
