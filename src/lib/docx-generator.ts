@@ -448,8 +448,8 @@ function buildCoverPage(data: {
   const cellChildren: Paragraph[] = [];
   const navyCellShading = { type: ShadingType.CLEAR, fill: NAVY };
 
-  // Spacing at top (empty paragraph, no visible characters)
-  cellChildren.push(new Paragraph({ spacing: { after: 1600 }, children: [] }));
+  // Spacing at top (before: replaces cell top margin, after: visual gap)
+  cellChildren.push(new Paragraph({ spacing: { before: convertMillimetersToTwip(15), after: 1200 }, children: [] }));
 
   // Brand logo
   const coverLogoBuf = getCorepropLogoBuffer();
@@ -535,20 +535,24 @@ function buildCoverPage(data: {
     right: { style: BorderStyle.NONE, size: 0, color: NAVY },
   };
 
+  // EXACT height = full A4 page. Cell margins are INSIDE this height.
+  // No top/bottom cell margins — use paragraph spacing instead to avoid overflow.
+  const coverRowHeight = convertMillimetersToTwip(297);
+
   const coverTable = new Table({
     width: { size: fullPageWidth, type: WidthType.DXA },
     layout: TableLayoutType.FIXED,
     rows: [
       new TableRow({
-        // No height constraint — content + spacers fill naturally
+        height: { value: coverRowHeight, rule: HeightRule.EXACT },
         children: [
           new TableCell({
             shading: navyCellShading,
             borders: noCellBorders,
             width: { size: fullPageWidth, type: WidthType.DXA },
             margins: {
-              top: convertMillimetersToTwip(15),
-              bottom: convertMillimetersToTwip(10),
+              top: 0,
+              bottom: 0,
               left: convertMillimetersToTwip(25),
               right: convertMillimetersToTwip(25),
             },
