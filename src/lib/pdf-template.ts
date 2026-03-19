@@ -513,7 +513,7 @@ function getContentStyles(): string {
 
     /* --- Table layout for repeating header/footer on every page --- */
     .page-table {
-      width: 100%;
+      width: 210mm;
       border-collapse: collapse;
     }
     .page-table td {
@@ -527,14 +527,15 @@ function getContentStyles(): string {
     }
     .header-banner {
       background: #1a2e3b;
-      min-height: 32mm;
-      padding: 6mm 25.4mm;
+      min-height: 28mm;
+      padding: 5mm 25.4mm;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      width: 210mm;
     }
-    .header-brand img { height: 22mm; }
-    .header-rics img { height: 17mm; width: auto; }
+    .header-brand img { height: 20mm; }
+    .header-rics img { height: 15mm; width: auto; }
 
     /* Footer uses position:fixed to repeat on every printed page */
     .fixed-footer {
@@ -542,6 +543,7 @@ function getContentStyles(): string {
       bottom: 0;
       left: 0;
       right: 0;
+      width: 210mm;
       z-index: 100;
       background: #fff;
     }
@@ -579,7 +581,7 @@ function getContentStyles(): string {
 
     /* --- Content area (left/right padding for margins) --- */
     .content-area {
-      padding: 10mm 25.4mm 38mm;
+      padding: 14mm 25.4mm 46mm;
     }
 
     /* --- Section headings --- */

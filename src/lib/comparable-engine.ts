@@ -57,6 +57,20 @@ function normalizeAddress(address: string): string {
     .trim();
 }
 
+/** Jaccard similarity on address tokens (0 to 1, where 1 = exact match) */
+function addressSimilarity(a: string, b: string): number {
+  const tokensA = new Set(a.split(' ').filter(Boolean));
+  const tokensB = new Set(b.split(' ').filter(Boolean));
+  if (tokensA.size === 0 && tokensB.size === 0) return 1;
+  if (tokensA.size === 0 || tokensB.size === 0) return 0;
+  let intersection = 0;
+  for (const token of tokensA) {
+    if (tokensB.has(token)) intersection++;
+  }
+  const union = new Set([...tokensA, ...tokensB]).size;
+  return union > 0 ? intersection / union : 0;
+}
+
 // --- Postcode parsing helpers ---
 
 /**
@@ -499,14 +513,12 @@ export async function findComparables(params: {
     }
   }
 
-  // Step 3: Fetch EPC data for the postcode sector in bulk
+  // Step 3: Fetch EPC data for ALL unique postcodes from LR results (not just same sector)
   const epcByPostcode = new Map<string, EPCData[]>();
   const postcodesToFetch = [...new Set([
     postcodeSector,
-    ...lrResults
-      .map((r) => r.postcode.trim().toUpperCase())
-      .filter((pc) => pc.startsWith(postcodeSector)),
-  ])].slice(0, 5); // Max 5 EPC lookups to keep it fast
+    ...lrResults.map((r) => r.postcode.trim().toUpperCase()),
+  ])].slice(0, 15); // Allow up to 15 postcodes to cover all comparables
 
   await Promise.all(
     postcodesToFetch.map(async (pc) => {
@@ -597,12 +609,63 @@ export async function findComparables(params: {
     };
   });
 
-  // Step 5: Merge auction comparables from DB
+  // Step 5: Merge auction comparables from DB (with EPC floor area lookup)
   if (auctionComps.length > 0) {
     console.log(`[comparable-engine] Merging ${auctionComps.length} auction comparables`);
+
+    // Fetch EPC data for auction postcodes not already fetched
+    const auctionPostcodes = [...new Set(
+      auctionComps
+        .filter((ac) => ac.postcode)
+        .map((ac) => ac.postcode.trim().toUpperCase()),
+    )].filter((pc) => !epcByPostcode.has(pc));
+
+    if (auctionPostcodes.length > 0) {
+      await Promise.all(
+        auctionPostcodes.slice(0, 10).map(async (pc) => {
+          try {
+            const epcResults = await searchEPCByPostcode(pc);
+            epcByPostcode.set(pc, epcResults);
+            allEpcRecords.push(...epcResults);
+          } catch (error) {
+            console.error(`[comparable-engine] EPC lookup failed for auction postcode ${pc}:`, error);
+          }
+        }),
+      );
+    }
+
     for (const ac of auctionComps) {
       // Skip if no sale price
       if (!ac.salePrice || !ac.saleDate) continue;
+
+      // Try to match EPC record by address for floor area
+      const acPostcode = ac.postcode.trim().toUpperCase();
+      const acEpcRecords = allEpcRecords.filter(
+        (e) => e.postcode.trim().toUpperCase() === acPostcode,
+      );
+      // Try fuzzy address match against EPC records
+      let matchedFloorArea: number | null = null;
+      let matchedEpcRating: string | null = null;
+      if (acEpcRecords.length > 0) {
+        const normalizedAcAddr = normalizeAddress(ac.address);
+        let bestScore = 0;
+        let bestEpc: EPCData | null = null;
+        for (const epc of acEpcRecords) {
+          const score = addressSimilarity(normalizedAcAddr, normalizeAddress(epc.address));
+          if (score > bestScore) {
+            bestScore = score;
+            bestEpc = epc;
+          }
+        }
+        if (bestEpc && bestScore >= 0.3) {
+          matchedFloorArea = bestEpc.floorArea && bestEpc.floorArea > 0 ? bestEpc.floorArea : null;
+          matchedEpcRating = bestEpc.currentEnergyRating || null;
+        }
+      }
+
+      const pricePerSqm = matchedFloorArea && matchedFloorArea > 0
+        ? Math.round((ac.salePrice / matchedFloorArea) * 100) / 100
+        : null;
 
       // Calculate distance if both have lat/lng
       let distanceMeters: number | null = null;
@@ -614,7 +677,7 @@ export async function findComparables(params: {
         comparable: {
           saleDate: ac.saleDate,
           propertyType: ac.propertyType || 'O',
-          floorArea: null,
+          floorArea: matchedFloorArea,
           postcode: ac.postcode,
           street: extractStreetFromAddress(ac.address),
           distanceMeters,
@@ -632,14 +695,14 @@ export async function findComparables(params: {
         address: ac.address,
         saleDate: ac.saleDate,
         salePrice: ac.salePrice,
-        floorArea: null,
-        pricePerSqm: null,
+        floorArea: matchedFloorArea,
+        pricePerSqm,
         propertyType: ac.propertyType || 'Other',
         bedrooms: ac.bedrooms,
         description: ac.description || `Auction sale (${ac.source})`,
         source: 'auction',
-        epcRating: null,
-        floorAreaSource: null,
+        epcRating: matchedEpcRating,
+        floorAreaSource: matchedFloorArea ? ('epc' as const) : null,
         distanceMeters,
         relevanceScore,
         isSelected: false,
