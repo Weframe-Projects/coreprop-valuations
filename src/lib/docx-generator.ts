@@ -1063,6 +1063,8 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     bottom: convertMillimetersToTwip(30),
     left: convertMillimetersToTwip(25),
     right: convertMillimetersToTwip(25),
+    header: convertMillimetersToTwip(2),  // header starts near top edge
+    footer: convertMillimetersToTwip(2),  // footer starts near bottom edge
   };
 
   const doc = new Document({
