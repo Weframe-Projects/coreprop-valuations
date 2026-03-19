@@ -811,6 +811,7 @@ function getContentStyles(): string {
       background-color: #f4f1ec;
       border-left: 4px solid #c49a6c;
       padding: 16px 20px;
+      margin-bottom: 20px;
       margin: 20px 0;
       page-break-inside: avoid;
     }
@@ -1327,7 +1328,8 @@ export function buildContentHTML(data: {
       <div class="appendix-body">
         ${textToHTML(templateSections.appendix1)}
       </div>
-    </div>`;
+    </div>
+    <!-- No page-break after appendix — avoids blank trailing page -->`;
 
   // --- Assemble final HTML using table layout for repeating header/footer ---
 
