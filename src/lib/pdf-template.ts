@@ -510,7 +510,7 @@ function getContentStyles(): string {
   return `
     @page {
       size: A4;
-      margin: 0;
+      margin: 46mm 0 24mm 0;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -528,11 +528,9 @@ function getContentStyles(): string {
     }
 
     /* --- Fixed-position footer (repeats on every printed page) --- */
-    /* bottom: -26mm offsets into Puppeteer's margin zone so the footer
-       renders at the actual page bottom, not at the content end. */
     .page-footer-fixed {
       position: fixed;
-      bottom: -26mm;
+      bottom: 0;
       left: 0;
       width: 210mm;
       z-index: 10;
@@ -564,11 +562,9 @@ function getContentStyles(): string {
     }
 
     /* --- Fixed-position header (repeats on every printed page) --- */
-    /* top: -48mm offsets into Puppeteer's margin zone so the header
-       renders at the actual page edge, not at the content start. */
     .page-header-fixed {
       position: fixed;
-      top: -48mm;
+      top: 0;
       left: 0;
       width: 210mm;
       z-index: 10;
