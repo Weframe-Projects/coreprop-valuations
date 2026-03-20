@@ -510,7 +510,7 @@ function getContentStyles(): string {
   return `
     @page {
       size: A4;
-      margin: 46mm 0 24mm 0;
+      margin: 0;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -614,10 +614,9 @@ function getContentStyles(): string {
       break-inside: avoid;
     }
 
-    /* --- Content area (left/right padding for margins) --- */
-    /* Fixed header ~30mm, fixed footer ~22mm. Pad content to avoid overlap. */
+    /* --- Content area (left/right padding for page margins) --- */
     .content-area {
-      padding: 8mm 25.4mm 10mm;
+      padding: 0 25.4mm;
     }
 
     /* --- Section headings (gold standard: "1.  Instructions" with tab indent) --- */
