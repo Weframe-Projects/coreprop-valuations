@@ -993,6 +993,9 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     buildNumberedSectionHeading(17, 'Valuation Conclusions and Market Commentary'),
   );
   children.push(...textToParagraphs(templateSections.marketCommentary));
+  if (sections['section_17_property_commentary']) {
+    children.push(...textToParagraphs(sections['section_17_property_commentary']));
+  }
   children.push(...textToParagraphs(valuationConclusionText));
   children.push(...buildValuationBox(valuationFigure, valuationFigureWords));
 

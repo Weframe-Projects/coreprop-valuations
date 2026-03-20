@@ -776,6 +776,102 @@ export async function generateReportSections(data: {
   return result;
 }
 
+// --- Property-Specific Market Commentary Generator ---
+
+export async function generatePropertyMarketCommentary(data: {
+  address: string;
+  propertyType: string;
+  bedrooms: number | null;
+  floorArea: number;
+  valuationFigure: number;
+  comparables: Comparable[];
+  location: string;
+  tenure: string;
+  reportType: ReportType;
+}): Promise<string> {
+  const {
+    address,
+    propertyType,
+    bedrooms,
+    floorArea,
+    valuationFigure,
+    comparables,
+    location,
+    tenure,
+    reportType,
+  } = data;
+
+  const propertyTypeLabel = PROPERTY_TYPE_LABELS[propertyType as keyof typeof PROPERTY_TYPE_LABELS] || propertyType;
+  const inspected = isInspectedType(reportType);
+  const desktop = isDesktopType(reportType);
+  const selectedComps = comparables.filter((c) => c.isSelected);
+
+  const compSummary = selectedComps.map((c) => {
+    const parts = [c.address];
+    if (c.salePrice) parts.push(`sold for £${c.salePrice.toLocaleString('en-GB')}`);
+    if (c.saleDate) parts.push(`on ${c.saleDate}`);
+    if (c.floorArea) parts.push(`(${c.floorArea}m²)`);
+    if (c.pricePerSqm) parts.push(`at £${Math.round(c.pricePerSqm).toLocaleString('en-GB')}/m²`);
+    if (c.description) parts.push(`— ${c.description}`);
+    return parts.join(' ');
+  }).join('\n');
+
+  const userPrompt = `Write 2-3 paragraphs of property-specific market commentary for a RICS Red Book valuation report, Section 17 ("Valuation Conclusions and Market Commentary").
+
+This text will appear AFTER generic boilerplate market commentary and BEFORE the valuation conclusion figure. It must NOT repeat general UK housing market commentary — that is already covered.
+
+--- PROPERTY DATA ---
+Address: ${address}
+Property Type: ${propertyTypeLabel}
+Bedrooms: ${bedrooms ?? 'unknown'}
+Floor Area: ${floorArea}m²
+Tenure: ${tenure}
+Location: ${location}
+Valuation Figure: £${valuationFigure.toLocaleString('en-GB')}
+Report Type: ${reportType} (${inspected ? 'inspected' : 'desktop'})
+
+--- SELECTED COMPARABLES ---
+${compSummary || 'No comparables selected.'}
+
+--- INSTRUCTIONS ---
+Write 2-3 formal paragraphs analysing:
+1. The specific property type and its market position in the local area (e.g. "close regard has been had to current market dynamics affecting the [location] [property type] market")
+2. How the comparable evidence relates to the subject property — note any adjustments, similarities, or differences that informed the valuation
+3. Any unique features or characteristics of the Property that affect its market value or marketability
+
+${desktop ? 'This is a DESKTOP valuation — note that no internal inspection was carried out and the valuation is based on assumed condition.' : ''}
+
+RULES:
+- Start each paragraph with its sub-number (17.1., 17.2., 17.3.)
+- Use "the Property" (capitalised) when referring to the subject
+- Write in formal third-person surveyor language
+- Be specific — reference actual comparable addresses and figures where relevant
+- Do NOT include any valuation figure or conclusion — that comes separately
+- Do NOT repeat general housing market commentary
+- Return ONLY the plain text paragraphs, no JSON wrapping
+
+Return the paragraphs as plain text separated by double newlines.`;
+
+  try {
+    const client = getClient();
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 2000,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+
+    const textBlock = response.content.find((block) => block.type === 'text');
+    if (textBlock && textBlock.type === 'text') {
+      return textBlock.text.trim();
+    }
+  } catch (error) {
+    console.error('[ai-generator] Property market commentary generation failed:', error);
+  }
+
+  return '';
+}
+
 // --- Comparable Description Enhancer ---
 
 export async function generateComparableDescriptions(

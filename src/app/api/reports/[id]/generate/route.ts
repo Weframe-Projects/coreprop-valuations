@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/server';
 import { searchEPCByAddress } from '@/lib/epc';
 import { fetchGoogleMapsData } from '@/lib/google-maps';
 import { findComparables } from '@/lib/comparable-engine';
-import { generateReportSections, generateComparableDescriptions } from '@/lib/ai-generator';
+import { generateReportSections, generateComparableDescriptions, generatePropertyMarketCommentary } from '@/lib/ai-generator';
 import { getReportTemplate, fillTemplate } from '@/lib/report-templates';
 import { fetchAllDataSources } from '@/lib/data-sources';
 import { parseRoomMeasurements } from '@/lib/floor-area-parser';
@@ -584,6 +584,24 @@ export async function POST(
       measuredFloorArea,
     });
 
+    // Generate property-specific market commentary (runs in parallel-safe manner after AI sections)
+    let propertyCommentary = '';
+    try {
+      propertyCommentary = await generatePropertyMarketCommentary({
+        address: fullAddress,
+        propertyType: fullPropertyDetails.propertyType,
+        bedrooms: epcData?.numberOfRooms ?? null,
+        floorArea: fullPropertyDetails.floorArea,
+        valuationFigure: currentRow.valuation_figure || 0,
+        comparables,
+        location: fullPropertyDetails.areaCharacter || '',
+        tenure: fullPropertyDetails.tenure,
+        reportType: currentRow.report_type,
+      });
+    } catch (err) {
+      console.error('[generate] Property market commentary generation failed (non-blocking):', err);
+    }
+
     // Get template sections (boilerplate text)
     const hasTitleNumber = !!(currentRow.land_registry_title && currentRow.land_registry_title.trim());
     const template = getReportTemplate(currentRow.report_type, settings, { hasTitleNumber });
@@ -678,6 +696,9 @@ export async function POST(
     // Template sections (16+)
     allSections.section_16_comparables_intro = filledTemplate.section_16_comparables_intro;
     allSections.section_17_market_commentary = filledTemplate.section_17_market_commentary;
+    if (propertyCommentary) {
+      allSections.section_17_property_commentary = propertyCommentary;
+    }
     allSections.section_18_valuation = filledTemplate.section_18_valuation;
     if (filledTemplate.section_19_auction_reserve) {
       allSections.section_19_auction_reserve = filledTemplate.section_19_auction_reserve;

@@ -1258,20 +1258,23 @@ export function buildContentHTML(data: {
     </div>
     <div class="footer-bottom-strip"></div>`;
 
-  // --- Helper: wrap content in the table row structure ---
+  // --- Helper: wrap content in table row(s) ---
+  // Split into multiple tbody rows for better pagination and tfoot rendering.
+  // Each row allows Chromium to insert page breaks and repeat tfoot properly.
   function wrapInPageBody(content: string): string {
     return `<tr class="page-body-row"><td>${content}</td></tr>`;
+  }
+  function wrapSections(...sections: string[]): string {
+    return sections.map(s => `<tr class="page-body-row"><td>${s}</td></tr>`).join('\n');
   }
 
   // --- Assemble all content sections ---
   // Sections 1-15 flow naturally without forced page breaks.
   // Breaks only before TOC end, section 16, section 17, and appendix.
-  const allContent = `
-    <!-- TOC -->
-    ${tocHTML}
-    <div class="page-break"></div>
+  // Build each major section as a separate HTML block
+  const tocSection = `${tocHTML}<div class="page-break"></div>`;
 
-    <!-- SECTIONS 1-15 (natural flow) -->
+  const mainSections = `
     <div class="content-area">
       ${buildNumberedSection(1, 'Instructions', templateSections.instructions, variables)}
       ${buildNumberedSection(2, 'Basis of Valuation', templateSections.basisOfValuation, variables)}
@@ -1307,9 +1310,9 @@ export function buildContentHTML(data: {
       ${buildNumberedSection(15, 'Amenity', sections['section_15_amenity'] ?? '', variables)}
       ${photoAppendixHTML}
     </div>
-    <div class="page-break"></div>
+    <div class="page-break"></div>`;
 
-    <!-- SECTION 16: Comparable Data -->
+  const comparableSection = `
     <div class="content-area">
       <div class="report-section">
         <h2 class="section-heading">16. &nbsp;Comparable Data</h2>
@@ -1319,15 +1322,18 @@ export function buildContentHTML(data: {
         ${buildComparableTable(comparables)}
       </div>
     </div>
-    <div class="page-break"></div>
+    <div class="page-break"></div>`;
 
-    <!-- SECTION 17: Valuation + Signature -->
+  const valuationSection = `
     <div class="content-area">
       <div class="report-section">
         <h2 class="section-heading">17. &nbsp;Valuation Conclusions and Market Commentary</h2>
         <div class="section-body">
           ${textToHTML(templateSections.marketCommentary)}
         </div>
+        ${sections['section_17_property_commentary'] ? `<div class="section-body" style="margin-top: 16px;">
+          ${textToHTML(sections['section_17_property_commentary'])}
+        </div>` : ''}
         <div class="section-body" style="margin-top: 16px;">
           ${textToHTML(valuationConclusionText)}
         </div>
@@ -1339,18 +1345,20 @@ export function buildContentHTML(data: {
       ${auctionReserveHTML}
       ${signatureHTML}
     </div>
-    <div class="page-break"></div>
+    <div class="page-break"></div>`;
 
-    <!-- APPENDIX 1 -->
+  const appendixSection = `
     <div class="content-area">
       <h1 class="appendix-heading">Appendix 1</h1>
       <div class="appendix-body">
         ${textToHTML(templateSections.appendix1)}
       </div>
-    </div>
-    <!-- No page-break after appendix — avoids blank trailing page -->`;
+    </div>`;
 
   // --- Assemble final HTML using table layout for repeating header/footer ---
+  // Each major section gets its own <tr> in the tbody. This allows Chromium
+  // to insert page breaks between rows and properly repeat the tfoot footer
+  // on every printed page.
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1363,7 +1371,6 @@ export function buildContentHTML(data: {
 </head>
 <body>
 
-  <!-- Table with thead/tfoot for repeating header and footer on every page -->
   <table class="page-table">
     <thead>
       <tr class="page-header-row"><td>${headerHTML}</td></tr>
@@ -1372,7 +1379,7 @@ export function buildContentHTML(data: {
       <tr class="page-footer-row"><td>${footerHTML}</td></tr>
     </tfoot>
     <tbody>
-      ${wrapInPageBody(allContent)}
+      ${wrapSections(tocSection, mainSections, comparableSection, valuationSection, appendixSection)}
     </tbody>
   </table>
 
