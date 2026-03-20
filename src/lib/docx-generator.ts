@@ -1175,8 +1175,8 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
             verticalAlign: VerticalAlign.CENTER,
             width: { size: leftColWidth, type: WidthType.DXA },
             margins: {
-              top: convertMillimetersToTwip(2),
-              bottom: convertMillimetersToTwip(2),
+              top: convertMillimetersToTwip(5),
+              bottom: convertMillimetersToTwip(5),
               left: convertMillimetersToTwip(20),
               right: 0,
             },
@@ -1189,8 +1189,8 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
             verticalAlign: VerticalAlign.CENTER,
             width: { size: rightColWidth, type: WidthType.DXA },
             margins: {
-              top: convertMillimetersToTwip(2),
-              bottom: convertMillimetersToTwip(2),
+              top: convertMillimetersToTwip(5),
+              bottom: convertMillimetersToTwip(5),
               left: 0,
               right: convertMillimetersToTwip(20),
             },
@@ -1201,12 +1201,11 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     ],
   });
 
-  // Address bar BELOW the navy table — white background, gold text, navy divider lines
+  // Address bar BELOW the navy table — white background, gold text, divider line BELOW only
   const addressBar = new Paragraph({
-    spacing: { before: 80, after: 0 },
+    spacing: { before: 120, after: 200 },
     border: {
-      top: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 3 },
-      bottom: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 3 },
+      bottom: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 4 },
     },
     children: [
       new TextRun({ text: propertyAddress, font: FONT, size: 20, color: GOLD }),
