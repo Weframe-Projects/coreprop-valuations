@@ -68,6 +68,7 @@ function loadLogoBuffer(filename: string): Buffer | null {
 
 let _corepropLogoBuf: Buffer | null | undefined;
 let _ricsLogoBuf: Buffer | null | undefined;
+let _ricsWhiteLogoBuf: Buffer | null | undefined;
 
 function getCorepropLogoBuffer(): Buffer | null {
   if (_corepropLogoBuf === undefined) _corepropLogoBuf = loadLogoBuffer('coreprop-logo.png');
@@ -77,6 +78,11 @@ function getCorepropLogoBuffer(): Buffer | null {
 function getRicsLogoBuffer(): Buffer | null {
   if (_ricsLogoBuf === undefined) _ricsLogoBuf = loadLogoBuffer('rics-logo-gold.png');
   return _ricsLogoBuf;
+}
+
+function getRicsWhiteLogoBuffer(): Buffer | null {
+  if (_ricsWhiteLogoBuf === undefined) _ricsWhiteLogoBuf = loadLogoBuffer('rics-logo-white.png');
+  return _ricsWhiteLogoBuf;
 }
 
 // --- Helpers ---
@@ -523,7 +529,65 @@ function buildCoverPage(data: {
     }),
   );
 
-  // No footer/contact info on cover page (user requirement)
+  // Spacer paragraphs to push contact footer to the bottom
+  for (let i = 0; i < 8; i++) {
+    cellChildren.push(new Paragraph({ spacing: { after: 400 }, children: [] }));
+  }
+
+  // Contact footer at bottom of cover (matching gold standard)
+  // Gold divider line
+  cellChildren.push(
+    new Paragraph({
+      spacing: { after: 80 },
+      border: { top: { style: BorderStyle.SINGLE, size: 1, color: GOLD, space: 4 } },
+      children: [],
+    }),
+  );
+
+  // Contact info row with RICS logo
+  const ricsWhiteBuf = getRicsWhiteLogoBuffer();
+  const coverContactLine1Children: (TextRun | ImageRun)[] = [
+    new TextRun({ text: 'p: +44 (0)20 8050 5060', font: FONT, size: 15, color: 'C0C0C0' }),
+    new TextRun({ text: '          ', font: FONT, size: 15 }),
+    new TextRun({ text: 'First Floor,', font: FONT, size: 15, color: 'C0C0C0' }),
+  ];
+  if (ricsWhiteBuf) {
+    coverContactLine1Children.push(
+      new ImageRun({
+        data: ricsWhiteBuf,
+        transformation: { width: 70, height: 28 },
+        type: 'png',
+        floating: {
+          horizontalPosition: { relative: 'margin', align: 'right' },
+          verticalPosition: { relative: 'paragraph', offset: 0 },
+          wrap: { type: 1, side: 'left' },
+        },
+      }),
+    );
+  }
+
+  cellChildren.push(
+    new Paragraph({
+      spacing: { after: 0 },
+      children: coverContactLine1Children,
+    }),
+    new Paragraph({
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: 'e: info@coreprop.co.uk', font: FONT, size: 15, color: 'C0C0C0' }),
+        new TextRun({ text: '          ', font: FONT, size: 15 }),
+        new TextRun({ text: '4 Pentonville Road', font: FONT, size: 15, color: 'C0C0C0' }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 15, color: 'C0C0C0' }),
+        new TextRun({ text: '          ', font: FONT, size: 15 }),
+        new TextRun({ text: 'London, N1 9HF', font: FONT, size: 15, color: 'C0C0C0' }),
+      ],
+    }),
+  );
 
   // Wrap everything in a single full-page table with navy cell shading
   const fullPageWidth = convertMillimetersToTwip(210);
@@ -572,6 +636,130 @@ function buildCoverPage(data: {
   });
 
   return [coverTable, trailingPara] as unknown as Paragraph[];
+}
+
+// --- Back Cover Page ---
+
+function buildBackCoverPage(): Paragraph[] {
+  const cellChildren: Paragraph[] = [];
+  const navyCellShading = { type: ShadingType.CLEAR, fill: NAVY };
+
+  // Top spacer
+  cellChildren.push(new Paragraph({ spacing: { before: convertMillimetersToTwip(15), after: 600 }, children: [] }));
+
+  // CoreProp logo
+  const logoBuf = getCorepropLogoBuffer();
+  if (logoBuf) {
+    cellChildren.push(
+      new Paragraph({
+        spacing: { after: 200 },
+        children: [
+          new ImageRun({ data: logoBuf, transformation: { width: 140, height: 103 }, type: 'png' }),
+        ],
+      }),
+    );
+  } else {
+    cellChildren.push(
+      new Paragraph({ children: [new TextRun({ text: 'The', font: FONT, size: 28, color: GOLD })] }),
+      new Paragraph({ children: [new TextRun({ text: 'CoreProp', font: FONT, size: 40, bold: true, color: 'FFFFFF' })] }),
+      new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: 'Group', font: FONT, size: 28, color: GOLD })] }),
+    );
+  }
+
+  // Spacers to push footer to bottom
+  for (let i = 0; i < 12; i++) {
+    cellChildren.push(new Paragraph({ spacing: { after: 400 }, children: [] }));
+  }
+
+  // Contact footer at bottom
+  cellChildren.push(
+    new Paragraph({
+      spacing: { after: 80 },
+      border: { top: { style: BorderStyle.SINGLE, size: 1, color: GOLD, space: 4 } },
+      children: [],
+    }),
+  );
+
+  const ricsWhiteBuf = getRicsWhiteLogoBuffer();
+  const backContactLine1: (TextRun | ImageRun)[] = [
+    new TextRun({ text: 'p: +44 (0)20 8050 5060', font: FONT, size: 15, color: 'C0C0C0' }),
+    new TextRun({ text: '          ', font: FONT, size: 15 }),
+    new TextRun({ text: 'First Floor,', font: FONT, size: 15, color: 'C0C0C0' }),
+  ];
+  if (ricsWhiteBuf) {
+    backContactLine1.push(
+      new ImageRun({
+        data: ricsWhiteBuf,
+        transformation: { width: 70, height: 28 },
+        type: 'png',
+        floating: {
+          horizontalPosition: { relative: 'margin', align: 'right' },
+          verticalPosition: { relative: 'paragraph', offset: 0 },
+          wrap: { type: 1, side: 'left' },
+        },
+      }),
+    );
+  }
+
+  cellChildren.push(
+    new Paragraph({ spacing: { after: 0 }, children: backContactLine1 }),
+    new Paragraph({
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: 'e: info@coreprop.co.uk', font: FONT, size: 15, color: 'C0C0C0' }),
+        new TextRun({ text: '          ', font: FONT, size: 15 }),
+        new TextRun({ text: '4 Pentonville Road', font: FONT, size: 15, color: 'C0C0C0' }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 15, color: 'C0C0C0' }),
+        new TextRun({ text: '          ', font: FONT, size: 15 }),
+        new TextRun({ text: 'London, N1 9HF', font: FONT, size: 15, color: 'C0C0C0' }),
+      ],
+    }),
+  );
+
+  const fullPageWidth = convertMillimetersToTwip(210);
+  const noCellBorders = {
+    top: { style: BorderStyle.NONE, size: 0, color: NAVY },
+    bottom: { style: BorderStyle.NONE, size: 0, color: NAVY },
+    left: { style: BorderStyle.NONE, size: 0, color: NAVY },
+    right: { style: BorderStyle.NONE, size: 0, color: NAVY },
+  };
+
+  const backCoverTable = new Table({
+    width: { size: fullPageWidth, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    rows: [
+      new TableRow({
+        height: { value: convertMillimetersToTwip(294), rule: HeightRule.EXACT },
+        children: [
+          new TableCell({
+            shading: navyCellShading,
+            borders: noCellBorders,
+            width: { size: fullPageWidth, type: WidthType.DXA },
+            margins: {
+              top: 0,
+              bottom: 0,
+              left: convertMillimetersToTwip(25),
+              right: convertMillimetersToTwip(25),
+            },
+            children: cellChildren,
+          }),
+        ],
+      }),
+    ],
+  });
+
+  const trailingPara = new Paragraph({
+    spacing: { before: 0, after: 0, line: 20 },
+    shading: { type: ShadingType.CLEAR, fill: NAVY },
+    children: [],
+  });
+
+  return [backCoverTable, trailingPara] as unknown as Paragraph[];
 }
 
 function getReportTypeDisplay(reportType: ReportType): string {
@@ -1094,6 +1282,17 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
           default: new Footer({ children: footerChildren }),
         },
         children: children as unknown as (Paragraph | Table)[],
+      },
+      // Section 3: Back cover page — navy branded page, no header/footer
+      {
+        properties: {
+          type: SectionType.NEXT_PAGE,
+          page: {
+            size: pageSize,
+            margin: { top: 0, bottom: 0, left: 0, right: 0 },
+          },
+        },
+        children: buildBackCoverPage() as unknown as (Paragraph | Table)[],
       },
     ],
   });

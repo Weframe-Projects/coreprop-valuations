@@ -266,22 +266,59 @@ function buildDescription(params: {
   propertyTypeLabel: string;
   bedrooms: number | null;
   floorArea: number | null;
+  tenure?: 'freehold' | 'leasehold' | null;
+  epcRating?: string | null;
+  builtForm?: string | null;
+  constructionAgeBand?: string | null;
+  floorAreaSource?: string | null;
 }): string {
-  const { propertyTypeLabel, bedrooms, floorArea } = params;
-  const typeLower = propertyTypeLabel.toLowerCase();
+  const { propertyTypeLabel, bedrooms, floorArea, tenure, epcRating, builtForm, constructionAgeBand, floorAreaSource } = params;
+
+  const parts: string[] = [];
+
+  // Floor area with source
   const hasArea = floorArea && floorArea > 0;
   const hasBeds = bedrooms && bedrooms > 0;
-
-  if (hasBeds && hasArea) {
-    return `${bedrooms}-bed ${typeLower}, ${Math.round(floorArea)}m\u00B2`;
-  }
-  if (hasBeds) {
-    return `${bedrooms}-bed ${typeLower}`;
-  }
   if (hasArea) {
-    return `${propertyTypeLabel}, ${Math.round(floorArea)}m\u00B2`;
+    const src = floorAreaSource === 'agent_floorplan' ? 'agent floorplan' : floorAreaSource || 'epc';
+    parts.push(`${Math.round(floorArea)}m\u00B2 (${src})`);
   }
-  return propertyTypeLabel;
+
+  // Bedrooms + type
+  const typeLower = propertyTypeLabel.toLowerCase();
+  if (hasBeds) {
+    parts.push(`${bedrooms}-bedroom s/c ${typeLower}`);
+  } else {
+    parts.push(`s/c ${typeLower}`);
+  }
+
+  // Tenure
+  if (tenure === 'leasehold') {
+    parts.push('Leasehold');
+  } else if (tenure === 'freehold') {
+    parts.push('Freehold');
+  }
+
+  // Built form (e.g., "Purpose-Built" or "Converted")
+  if (builtForm) {
+    const bf = builtForm.toLowerCase();
+    if (bf.includes('purpose') || bf.includes('built')) {
+      parts.push('Purpose-built');
+    } else if (bf.includes('convert')) {
+      parts.push('Converted');
+    } else if (bf.includes('detach') || bf.includes('semi') || bf.includes('terrace') || bf.includes('end')) {
+      // Already captured in property type, skip
+    } else if (bf && bf !== 'no data!' && bf !== 'unknown') {
+      parts.push(builtForm);
+    }
+  }
+
+  // EPC rating
+  if (epcRating && epcRating.length === 1) {
+    parts.push(`EPC rating ${epcRating}`);
+  }
+
+  return parts.join('. ') + '.';
 }
 
 // --- Hard filter: remove incompatible comparables ---
@@ -662,6 +699,11 @@ export async function findComparables(params: {
       propertyTypeLabel,
       bedrooms,
       floorArea,
+      tenure: sale.tenure === 'F' ? 'freehold' : sale.tenure === 'L' ? 'leasehold' : null,
+      epcRating,
+      builtForm: matchedEPC?.builtForm ?? null,
+      constructionAgeBand: matchedEPC?.constructionAgeBand ?? null,
+      floorAreaSource: matchedEPC ? 'epc' : null,
     });
 
     // Calculate distance if we have subject lat/lng

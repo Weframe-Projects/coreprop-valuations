@@ -271,25 +271,30 @@ Appendix 1 lists the RICS Standard Valuation Terms and Conditions and assumption
 // Non-IHT version includes the Commercial Property paragraph
 const COMMERCIAL_PROPERTY_PARAGRAPH = `Commercial Property conditions are mixed and highly quality-selective. Prime central London offices and modern logistics assets remain comparatively resilient, supported by flight-to-quality occupier demand, while secondary offices continue to face higher vacancy, retrofit requirements and pressure on rents. Retail occupier demand is generally weak outside prime locations, with secondary high street and shopping centre space under particular pressure. Investment activity is improving gradually from late-2024 lows but remains cautious and selective, with higher yields required outside core assets and locations and underwriting focused on income resilience and ESG compliance.`;
 
+function addSubNumbering(text: string, sectionNum: number): string {
+  const paragraphs = text.split('\n\n');
+  return paragraphs.map((p, i) => `${sectionNum}.${i + 1}. ${p}`).join('\n\n');
+}
+
 function getMarketCommentaryForType(reportType: ReportType, settings?: UserSettings | null): string {
   const isIHT = isIHTType(reportType);
 
   // If settings have custom commentary, use that
   if (settings) {
     const custom = isIHT ? settings.marketCommentaryIht : settings.marketCommentaryNonIht;
-    if (custom && custom.trim()) return custom;
+    if (custom && custom.trim()) return addSubNumbering(custom, 17);
   }
 
   // Default: IHT uses the base commentary, non-IHT inserts Commercial Property paragraph
   if (isIHT) {
-    return MARKET_COMMENTARY;
+    return addSubNumbering(MARKET_COMMENTARY, 17);
   }
 
   // Insert Commercial Property paragraph after the residential sales paragraph
   const paragraphs = MARKET_COMMENTARY.split('\n\n');
   // Insert after paragraph 4 (index 3) — the residential sales paragraph
   paragraphs.splice(4, 0, COMMERCIAL_PROPERTY_PARAGRAPH);
-  return paragraphs.join('\n\n');
+  return addSubNumbering(paragraphs.join('\n\n'), 17);
 }
 
 function getSignatureBlockForType(reportType: ReportType, settings?: UserSettings | null): string {

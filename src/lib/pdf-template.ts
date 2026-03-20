@@ -455,7 +455,7 @@ function getCoverStyles(): string {
       print-color-adjust: exact;
     }
     .cover-page {
-      width: 210mm; min-height: 297mm;
+      width: 210mm; height: 297mm; overflow: hidden;
       background: #1a2e3b;
       display: flex; flex-direction: column; justify-content: space-between;
       padding: 30mm 30mm 20mm;
