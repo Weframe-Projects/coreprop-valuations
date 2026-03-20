@@ -805,13 +805,22 @@ export async function generateComparableDescriptions(
       tenure: c.tenure,
     }));
 
-    const userPrompt = `You are writing comparable property descriptions for a RICS valuation report. Each description should be 2-3 concise sentences covering: floor area + source, bedrooms, property type, condition, notable features (parking, garden, tenure, lease term if available). Match this exact style from a real CoreProp report:
+    const userPrompt = `You are writing comparable property descriptions for a RICS valuation report. Each description should be a concise factual summary. Match this exact style from real CoreProp reports:
 
-"43m2 (agent floorplan) \n1 bedroom s/c second floor flat in basic order throughout. Purpose built block. Communal gardens. Leasehold. Similar style."
-"78m2 (agent floorplan) \n2 bedroom s/c ground floor flat in fair / modern order throughout. Purpose built block. Private rear garden. Off-street parking. Leasehold, 142 years remaining"
-"62m2 (agent floorplan) \n2-bedroom s/c ground floor flat in basic order throughout. Purpose built block. Private rear garden. Leasehold."
+"253m2 (agent floorplan) \n3 bedroom s/c fifth floor penthouse flat in modern order throughout. Purpose-built mansion block. Direct lift access. Share of Freehold. Highly comparable."
+"233m2 (agent floorplan) \n5 bedroom s/c third floor penthouse flat in fair / dated order throughout. Purpose-built block. Leasehold. £28,000 per annum service charge."
+"187m2 (agent floorplan) \n3 bedroom s/c fourth floor flat in basic order. Direct lift access and porterage. Leasehold, 958 years remaining."
 
-Note the floor area and source always comes first on its own line, followed by the description. Use "s/c" for self-contained. Include "Similar style" if the property is comparable in type.
+RULES:
+- Floor area and source (EPC or agent floorplan) comes first on its own line, e.g. "215m² (EPC)"
+- Then: [bedrooms]-bedroom s/c [type] description
+- Use "s/c" for self-contained
+- Include tenure (Freehold/Leasehold) and remaining lease years if known
+- Include built form if known (Purpose-built block, Period conversion, etc.)
+- Include notable features: lift access, parking, concierge, garden
+- NEVER say "Condition not assessed" or "Bedroom count not recorded" or "No further details available" — if you don't know something, just leave it out
+- End with "Similar style." if the property type is comparable
+- Keep descriptions factual and concise (2-4 lines max)
 
 Here are the comparables to describe:
 
@@ -821,7 +830,7 @@ Return a JSON object where the key is the index (as a string) and the value is t
 
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 2000,
+      max_tokens: 3000,
       system: SYSTEM_PROMPT,
       messages: [
         {

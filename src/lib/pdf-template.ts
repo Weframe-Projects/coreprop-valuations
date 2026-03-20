@@ -531,13 +531,19 @@ function getContentStyles(): string {
     .page-table {
       width: 210mm;
       border-collapse: collapse;
+      table-layout: fixed;
     }
     .page-table td {
       padding: 0;
       vertical-align: top;
     }
-    .page-table thead { display: table-header-group; }
-    .page-table tfoot { display: table-footer-group; }
+    .page-table thead { display: table-header-group !important; }
+    .page-table tfoot { display: table-footer-group !important; }
+
+    @media print {
+      .page-table thead { display: table-header-group !important; }
+      .page-table tfoot { display: table-footer-group !important; }
+    }
 
     /* Header repeats on every page via <thead> */
     .page-header-row td {
