@@ -1214,16 +1214,13 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
 
   const headerChildren: (Paragraph | Table)[] = [headerTable, addressBar];
 
-  // Footer: white background with divider line + contact info + RICS logo (matching gold standard)
-  const footerLine1Children: (TextRun | ImageRun)[] = [
-    new TextRun({ text: `p: ${data.firmSettings?.phone || '+44 (0)20 8050 5060'}`, font: FONT, size: 15, color: GREY }),
-    new TextRun({ text: '          ', font: FONT, size: 15 }),
-    new TextRun({ text: 'First Floor,', font: FONT, size: 15, color: GREY }),
-  ];
+  // Footer: white background with divider line + contact info (tab-aligned) + RICS logo
+  const footerTabStop = convertMillimetersToTwip(65); // Address column starts at 65mm
 
-  // Add RICS logo floating right on the first line
+  // RICS logo floating right (attached to first line)
+  const ricsLogoRun: (TextRun | ImageRun)[] = [];
   if (ricsLogoBuf) {
-    footerLine1Children.push(
+    ricsLogoRun.push(
       new ImageRun({
         data: ricsLogoBuf,
         transformation: { width: 80, height: 32 },
@@ -1240,28 +1237,38 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
   const footerChildren: (Paragraph | Table)[] = [
     // Divider line
     new Paragraph({
-      spacing: { after: 80 },
-      border: { top: { style: BorderStyle.SINGLE, size: 1, color: '1a2e3b', space: 4 } },
+      spacing: { after: 120 },
+      border: { top: { style: BorderStyle.SINGLE, size: 1, color: NAVY, space: 4 } },
       children: [],
     }),
-    // Contact info lines
+    // Line 1: phone + address part 1
     new Paragraph({
       spacing: { after: 0 },
-      children: footerLine1Children,
+      tabStops: [{ type: TabStopType.LEFT, position: footerTabStop }],
+      children: [
+        new TextRun({ text: `p: ${data.firmSettings?.phone || '+44 (0)20 8050 5060'}`, font: FONT, size: 15, color: GREY }),
+        new TextRun({ text: '\t', font: FONT }),
+        new TextRun({ text: 'First Floor,', font: FONT, size: 15, color: GREY }),
+        ...ricsLogoRun,
+      ],
     }),
+    // Line 2: email + address part 2
     new Paragraph({
       spacing: { after: 0 },
+      tabStops: [{ type: TabStopType.LEFT, position: footerTabStop }],
       children: [
         new TextRun({ text: `e: ${data.firmSettings?.email || 'nick.green@coreprop.co.uk'}`, font: FONT, size: 15, color: GREY }),
-        new TextRun({ text: '          ', font: FONT, size: 15 }),
+        new TextRun({ text: '\t', font: FONT }),
         new TextRun({ text: '4 Pentonville Road,', font: FONT, size: 15, color: GREY }),
       ],
     }),
+    // Line 3: website + address part 3
     new Paragraph({
       spacing: { after: 0 },
+      tabStops: [{ type: TabStopType.LEFT, position: footerTabStop }],
       children: [
         new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 15, color: GREY }),
-        new TextRun({ text: '          ', font: FONT, size: 15 }),
+        new TextRun({ text: '\t', font: FONT }),
         new TextRun({ text: 'London, N1 9HF', font: FONT, size: 15, color: GREY }),
       ],
     }),
