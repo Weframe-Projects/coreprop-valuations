@@ -592,7 +592,8 @@ function getContentStyles(): string {
       margin-top: 2px;
     }
     .header-address-bar {
-      padding: 4mm 25.4mm 0;
+      padding: 3mm 25.4mm 0;
+      background: #ffffff;
     }
     .header-address-bar .h-addr {
       font-size: 9pt;
