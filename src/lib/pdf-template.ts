@@ -527,68 +527,16 @@ function getContentStyles(): string {
       print-color-adjust: exact;
     }
 
-    /* --- Table layout for repeating header/footer on every page --- */
-    .page-table {
+    /* --- Fixed-position footer (repeats on every printed page) --- */
+    .page-footer-fixed {
+      position: fixed;
+      bottom: 0;
+      left: 0;
       width: 210mm;
-      border-collapse: collapse;
-      table-layout: fixed;
-    }
-    .page-table td {
-      padding: 0;
-      vertical-align: top;
-    }
-    .page-table thead { display: table-header-group !important; }
-    .page-table tfoot { display: table-footer-group !important; }
-
-    @media print {
-      .page-table thead { display: table-header-group !important; }
-      .page-table tfoot { display: table-footer-group !important; }
-    }
-
-    /* Header repeats on every page via <thead> */
-    .page-header-row td {
-      padding: 0;
-    }
-    .header-banner {
-      background: #1a2e3b;
-      padding: 8mm 25.4mm 6mm;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      width: 210mm;
-    }
-    .header-brand img { height: 18mm; }
-    .header-right { text-align: right; }
-    .header-right .h-cs {
-      color: #ffffff;
-      font-size: 11pt;
-      font-weight: 700;
-      font-family: Arial, Helvetica, sans-serif;
-    }
-    .header-right .h-sv {
-      color: #c0c0c0;
-      font-size: 8pt;
-      font-family: Arial, Helvetica, sans-serif;
-      margin-top: 2px;
-    }
-    .header-address-bar {
-      padding: 4mm 25.4mm 0;
-    }
-    .header-address-bar .h-addr {
-      font-size: 9pt;
-      color: #8b7355;
-      padding-bottom: 3mm;
-      border-bottom: 1.5px solid #1a2e3b;
-    }
-
-    /* Footer repeats on every page via <tfoot> */
-    .page-footer-row td {
-      padding: 0;
-      vertical-align: bottom;
-      height: 22mm;
+      z-index: 10;
     }
     .footer-bar {
-      border-top: 2px solid #1a2e3b;
+      border-top: 1.5px solid #1a2e3b;
       margin: 0 25.4mm;
       padding: 3mm 0 2mm;
       display: flex;
@@ -613,6 +561,46 @@ function getContentStyles(): string {
       margin-top: 2mm;
     }
 
+    /* --- Fixed-position header (repeats on every printed page) --- */
+    .page-header-fixed {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 210mm;
+      z-index: 10;
+    }
+    .header-banner {
+      background: #1a2e3b;
+      padding: 8mm 25.4mm 6mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 210mm;
+    }
+    .header-brand img { height: 18mm; }
+    .header-right { text-align: right; }
+    .header-right .h-cs {
+      color: #ffffff;
+      font-size: 11pt;
+      font-weight: 400;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .header-right .h-sv {
+      color: #c0c0c0;
+      font-size: 8pt;
+      font-family: Arial, Helvetica, sans-serif;
+      margin-top: 2px;
+    }
+    .header-address-bar {
+      padding: 4mm 25.4mm 0;
+    }
+    .header-address-bar .h-addr {
+      font-size: 9pt;
+      color: #8b7355;
+      padding-bottom: 3mm;
+      border-bottom: 1.5px solid #1a2e3b;
+    }
+
     /* --- Page break utilities --- */
     .page-break {
       page-break-after: always;
@@ -626,12 +614,12 @@ function getContentStyles(): string {
     }
 
     /* --- Content area (left/right padding for margins) --- */
-    /* tfoot handles footer spacing, so bottom padding is just for visual breathing room */
+    /* Fixed header ~30mm, fixed footer ~22mm. Pad content to avoid overlap. */
     .content-area {
-      padding: 16mm 25.4mm 10mm;
+      padding: 8mm 25.4mm 10mm;
     }
 
-    /* --- Section headings --- */
+    /* --- Section headings (gold standard: "1.  Instructions" with tab indent) --- */
     .section-heading {
       font-size: 10.5pt;
       font-weight: 700;
@@ -640,6 +628,8 @@ function getContentStyles(): string {
       margin-bottom: 10px;
       page-break-after: avoid;
       break-after: avoid;
+      padding-left: 12mm;
+      text-indent: -12mm;
     }
 
     /* Accommodation section — left aligned like all other sections */
@@ -654,6 +644,8 @@ function getContentStyles(): string {
       line-height: 1.6;
       orphans: 3;
       widows: 3;
+      padding-left: 12mm;
+      text-indent: -12mm;
     }
 
     .report-section {
@@ -1371,17 +1363,18 @@ export function buildContentHTML(data: {
 </head>
 <body>
 
-  <table class="page-table">
-    <thead>
-      <tr class="page-header-row"><td>${headerHTML}</td></tr>
-    </thead>
-    <tfoot>
-      <tr class="page-footer-row"><td>${footerHTML}</td></tr>
-    </tfoot>
-    <tbody>
-      ${wrapSections(tocSection, mainSections, comparableSection, valuationSection, appendixSection)}
-    </tbody>
-  </table>
+  <!-- Fixed header and footer repeat on every printed page -->
+  <div class="page-header-fixed">${headerHTML}</div>
+  <div class="page-footer-fixed">${footerHTML}</div>
+
+  <!-- Content flows naturally with top/bottom margins to avoid overlap -->
+  <div style="padding-top: 32mm; padding-bottom: 24mm;">
+    ${tocSection}
+    ${mainSections}
+    ${comparableSection}
+    ${valuationSection}
+    ${appendixSection}
+  </div>
 
 </body>
 </html>`;

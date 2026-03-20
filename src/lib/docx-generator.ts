@@ -150,11 +150,21 @@ function textToRuns(text: string): TextRun[] {
 function textToParagraphs(text: string, variables?: Record<string, string>): Paragraph[] {
   const filled = variables ? fillTemplate(text, variables) : text;
   return splitParagraphs(filled).map(
-    (p) =>
-      new Paragraph({
+    (p) => {
+      // Detect numbered paragraphs (e.g. "1.1." or "3.1.2.") and apply hanging indent
+      const numberedMatch = p.match(/^(\d+\.\d+[\d.]*\.?\s)/);
+      if (numberedMatch) {
+        return new Paragraph({
+          spacing: { after: 160 },
+          indent: { left: convertMillimetersToTwip(12), hanging: convertMillimetersToTwip(12) },
+          children: textToRuns(p),
+        });
+      }
+      return new Paragraph({
         spacing: { after: 160 },
         children: textToRuns(p),
-      }),
+      });
+    },
   );
 }
 
@@ -163,15 +173,28 @@ function textToParagraphs(text: string, variables?: Record<string, string>): Par
 function buildNumberedSectionHeading(sectionNumber: number, title: string): Paragraph {
   return new Paragraph({
     spacing: { before: 400, after: 200 },
+    indent: { left: convertMillimetersToTwip(12), hanging: convertMillimetersToTwip(12) },
     children: [
       new TextRun({
-        text: `${sectionNumber}.  ${title}`,
+        text: `${sectionNumber}.`,
         bold: true,
         font: FONT,
-        size: FONT_SIZE, // 10.5pt — matching body text
+        size: FONT_SIZE,
+        color: '000000',
+      }),
+      new TextRun({
+        text: '\t',
+        font: FONT,
+      }),
+      new TextRun({
+        text: title,
+        bold: true,
+        font: FONT,
+        size: FONT_SIZE,
         color: '000000',
       }),
     ],
+    tabStops: [{ type: TabStopType.LEFT, position: convertMillimetersToTwip(12) }],
   });
 }
 
@@ -1112,7 +1135,7 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
       spacing: { after: 0 },
       children: [
         new TextRun({ text: '\t', font: FONT }),
-        new TextRun({ text: 'Chartered Surveyors', font: FONT, size: FONT_SIZE, bold: true, color: 'FFFFFF' }),
+        new TextRun({ text: 'Chartered Surveyors', font: FONT, size: FONT_SIZE, color: 'FFFFFF' }),
       ],
       tabStops: [{ type: TabStopType.RIGHT, position: convertMillimetersToTwip(170) }],
     }),
@@ -1163,44 +1186,16 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
 
   const headerChildren: (Paragraph | Table)[] = [headerTable];
 
-  // Footer: full-bleed navy table with contact info + RICS logo inside
-  const footerCellChildren: Paragraph[] = [
-    // Divider line
-    new Paragraph({
-      spacing: { after: 80 },
-      border: { top: { style: BorderStyle.SINGLE, size: 1, color: '3a5a6b', space: 4 } },
-      children: [],
-    }),
-    // Phone + address
-    new Paragraph({
-      spacing: { after: 0 },
-      children: [
-        new TextRun({ text: `p: ${data.firmSettings?.phone || '+44 (0)20 8050 5060'}`, font: FONT, size: 15, color: 'C0C0C0' }),
-        new TextRun({ text: '          ', font: FONT, size: 15 }),
-        new TextRun({ text: 'First Floor,', font: FONT, size: 15, color: 'C0C0C0' }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 0 },
-      children: [
-        new TextRun({ text: `e: ${data.firmSettings?.email || 'info@coreprop.co.uk'}`, font: FONT, size: 15, color: 'C0C0C0' }),
-        new TextRun({ text: '          ', font: FONT, size: 15 }),
-        new TextRun({ text: '4 Pentonville Road,', font: FONT, size: 15, color: 'C0C0C0' }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 0 },
-      children: [
-        new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 15, color: 'C0C0C0' }),
-        new TextRun({ text: '          ', font: FONT, size: 15 }),
-        new TextRun({ text: 'London, N1 9HF', font: FONT, size: 15, color: 'C0C0C0' }),
-      ],
-    }),
+  // Footer: white background with divider line + contact info + RICS logo (matching gold standard)
+  const footerLine1Children: (TextRun | ImageRun)[] = [
+    new TextRun({ text: `p: ${data.firmSettings?.phone || '+44 (0)20 8050 5060'}`, font: FONT, size: 15, color: GREY }),
+    new TextRun({ text: '          ', font: FONT, size: 15 }),
+    new TextRun({ text: 'First Floor,', font: FONT, size: 15, color: GREY }),
   ];
 
-  // Add RICS logo floating right
+  // Add RICS logo floating right on the first line
   if (ricsLogoBuf) {
-    footerCellChildren[1].addChildElement(
+    footerLine1Children.push(
       new ImageRun({
         data: ricsLogoBuf,
         transformation: { width: 80, height: 32 },
@@ -1214,42 +1209,47 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     );
   }
 
-  const footerTable = new Table({
-    width: { size: fullPageWidthTwip, type: WidthType.DXA },
-    layout: TableLayoutType.FIXED,
-    indent: { size: -marginTwip, type: WidthType.DXA },
-    rows: [
-      new TableRow({
-        children: [
-          new TableCell({
-            shading: navyCellShading,
-            borders: noBorders,
-            width: { size: fullPageWidthTwip, type: WidthType.DXA },
-            margins: {
-              top: convertMillimetersToTwip(3),
-              bottom: convertMillimetersToTwip(3),
-              left: convertMillimetersToTwip(20),
-              right: convertMillimetersToTwip(20),
-            },
-            children: footerCellChildren,
-          }),
-        ],
-      }),
-    ],
-  });
-  const footerChildren: (Paragraph | Table)[] = [footerTable];
+  const footerChildren: (Paragraph | Table)[] = [
+    // Divider line
+    new Paragraph({
+      spacing: { after: 80 },
+      border: { top: { style: BorderStyle.SINGLE, size: 1, color: '1a2e3b', space: 4 } },
+      children: [],
+    }),
+    // Contact info lines
+    new Paragraph({
+      spacing: { after: 0 },
+      children: footerLine1Children,
+    }),
+    new Paragraph({
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: `e: ${data.firmSettings?.email || 'nick.green@coreprop.co.uk'}`, font: FONT, size: 15, color: GREY }),
+        new TextRun({ text: '          ', font: FONT, size: 15 }),
+        new TextRun({ text: '4 Pentonville Road,', font: FONT, size: 15, color: GREY }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 0 },
+      children: [
+        new TextRun({ text: 'w: www.coreprop.co.uk', font: FONT, size: 15, color: GREY }),
+        new TextRun({ text: '          ', font: FONT, size: 15 }),
+        new TextRun({ text: 'London, N1 9HF', font: FONT, size: 15, color: GREY }),
+      ],
+    }),
+  ];
 
   const pageSize = {
     width: convertMillimetersToTwip(210),
     height: convertMillimetersToTwip(297),
   };
   const pageMargins = {
-    top: convertMillimetersToTwip(35),
-    bottom: convertMillimetersToTwip(30),
+    top: convertMillimetersToTwip(38),
+    bottom: convertMillimetersToTwip(28),
     left: convertMillimetersToTwip(25),
     right: convertMillimetersToTwip(25),
     header: 0,  // header starts at very top edge
-    footer: 0,  // footer starts at very bottom edge
+    footer: convertMillimetersToTwip(8),  // footer offset from bottom
   };
 
   const doc = new Document({
