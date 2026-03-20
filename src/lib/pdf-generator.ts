@@ -133,17 +133,16 @@ export async function generatePDF(data: GeneratePDFInput): Promise<Buffer> {
 
     // --------------------------------------------------
     // 2. CONTENT PAGES
-    // Header/footer are embedded directly in the HTML using a CSS
-    // table layout trick (<thead>/<tfoot> repeat on every printed page).
-    // This gives full control over backgrounds, colors, and layout
-    // without Puppeteer's quirky displayHeaderFooter.
+    // Header/footer are position:fixed in the HTML (repeat on every
+    // printed page). Puppeteer margins push content below header and
+    // above footer so text never overlaps with them.
     // --------------------------------------------------
     await loadPageContent(contentHtml, 15_000);
     const contentPdf = await page.pdf({
       format: 'A4',
       printBackground: true,
       displayHeaderFooter: false,
-      margin: { top: '0mm', bottom: '0mm', left: '0mm', right: '0mm' },
+      margin: { top: '34mm', bottom: '26mm', left: '0mm', right: '0mm' },
     });
 
     // --------------------------------------------------

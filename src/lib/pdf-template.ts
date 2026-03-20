@@ -646,10 +646,22 @@ function getContentStyles(): string {
       widows: 3;
       padding-left: 12mm;
       text-indent: -12mm;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .content-wrapper {
+      /* No padding needed — Puppeteer margins handle header/footer clearance */
     }
 
     .report-section {
       margin-bottom: 8px;
+    }
+
+    /* Section heading must always stay with the first paragraph below it */
+    .section-heading + .section-body {
+      page-break-before: avoid;
+      break-before: avoid;
     }
 
     /* --- Bracket highlight --- */
@@ -787,6 +799,7 @@ function getContentStyles(): string {
       margin: 16px 0;
       text-align: center;
       page-break-inside: avoid;
+      break-inside: avoid;
     }
 
     .inline-photo img {
@@ -821,9 +834,9 @@ function getContentStyles(): string {
       background-color: #f4f1ec;
       border-left: 4px solid #c49a6c;
       padding: 16px 20px;
-      margin-bottom: 20px;
       margin: 20px 0;
       page-break-inside: avoid;
+      break-inside: avoid;
     }
 
     .valuation-figure .amount {
@@ -866,6 +879,7 @@ function getContentStyles(): string {
       margin-top: 30px;
       padding-top: 16px;
       page-break-inside: avoid;
+      break-inside: avoid;
     }
 
     .signature-block p { margin-bottom: 2px; font-size: 10pt; }
@@ -881,6 +895,8 @@ function getContentStyles(): string {
       color: #1a2e3b;
       margin-bottom: 16px;
       padding-bottom: 6px;
+      page-break-after: avoid;
+      break-after: avoid;
       border-bottom: 2px solid #c49a6c;
     }
 
@@ -1367,8 +1383,8 @@ export function buildContentHTML(data: {
   <div class="page-header-fixed">${headerHTML}</div>
   <div class="page-footer-fixed">${footerHTML}</div>
 
-  <!-- Content flows naturally with top/bottom margins to avoid overlap -->
-  <div style="padding-top: 32mm; padding-bottom: 24mm;">
+  <!-- Content flows naturally; Puppeteer margins keep it below header / above footer -->
+  <div class="content-wrapper">
     ${tocSection}
     ${mainSections}
     ${comparableSection}

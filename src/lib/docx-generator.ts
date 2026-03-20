@@ -157,11 +157,13 @@ function textToParagraphs(text: string, variables?: Record<string, string>): Par
         return new Paragraph({
           spacing: { after: 160 },
           indent: { left: convertMillimetersToTwip(12), hanging: convertMillimetersToTwip(12) },
+          keepLines: true,   // Keep paragraph together on one page
           children: textToRuns(p),
         });
       }
       return new Paragraph({
         spacing: { after: 160 },
+        keepLines: true,   // Keep paragraph together on one page
         children: textToRuns(p),
       });
     },
@@ -174,6 +176,8 @@ function buildNumberedSectionHeading(sectionNumber: number, title: string): Para
   return new Paragraph({
     spacing: { before: 400, after: 200 },
     indent: { left: convertMillimetersToTwip(12), hanging: convertMillimetersToTwip(12) },
+    keepNext: true,   // Never orphan a heading at the bottom of a page
+    keepLines: true,   // Keep the heading text together on one page
     children: [
       new TextRun({
         text: `${sectionNumber}.`,
@@ -236,6 +240,8 @@ function makePhotoSection(
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 240, after: 240 },
+      keepLines: true,    // Keep image paragraph together
+      keepNext: false,
       children: [
         new ImageRun({
           data: buf,
@@ -367,6 +373,8 @@ function buildValuationBox(
   return [
     new Paragraph({
       spacing: { before: 400, after: 80 },
+      keepNext: true,     // Keep amount with words line
+      keepLines: true,
       border: {
         left: { style: BorderStyle.SINGLE, size: 12, color: GOLD, space: 8 },
       },
@@ -383,6 +391,7 @@ function buildValuationBox(
     }),
     new Paragraph({
       spacing: { after: 400 },
+      keepLines: true,
       border: {
         left: { style: BorderStyle.SINGLE, size: 12, color: GOLD, space: 8 },
       },
@@ -413,15 +422,17 @@ function buildSignatureBlock(
   return [
     new Paragraph({
       spacing: { before: 600 },
+      keepNext: true,      // Keep entire signature block together
       children: [
         new TextRun({ text: 'Signed:', font: FONT, size: FONT_SIZE }),
       ],
     }),
     // Signature space
-    new Paragraph({ spacing: { after: 600 }, children: [] }),
+    new Paragraph({ spacing: { after: 600 }, keepNext: true, children: [] }),
     // Name
     new Paragraph({
       spacing: { after: 40 },
+      keepNext: true,
       children: [
         new TextRun({
           text: sigName,
@@ -437,6 +448,7 @@ function buildSignatureBlock(
       (t) =>
         new Paragraph({
           spacing: { after: 20 },
+          keepNext: true,
           children: [
             new TextRun({ text: t, font: FONT, size: FONT_SIZE, color: GREY }),
           ],
@@ -445,6 +457,7 @@ function buildSignatureBlock(
     // Date
     new Paragraph({
       spacing: { before: 240, after: 200 },
+      keepLines: true,
       children: [
         new TextRun({
           text: `Date of Report: ${valuationDate}`,
