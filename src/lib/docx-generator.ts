@@ -1100,8 +1100,8 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
   const corepropLogoBuf = getCorepropLogoBuffer();
   const ricsLogoBuf = getRicsLogoBuffer();
 
-  // Header: Navy banner as a full-width TABLE (reliable full-bleed in Word)
-  // then spacer + address bar as regular paragraphs.
+  // Header: Two-column navy table (logo LEFT, text RIGHT on SAME LINE)
+  // then address bar below on white background
   const noBorders = {
     top: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
     bottom: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
@@ -1111,15 +1111,15 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
   const navyCellShading = { type: ShadingType.CLEAR, fill: NAVY };
   const marginTwip = convertMillimetersToTwip(25);
   const fullPageWidthTwip = convertMillimetersToTwip(210);
+  const leftColWidth = convertMillimetersToTwip(90);   // logo column
+  const rightColWidth = convertMillimetersToTwip(120);  // text column
 
-  // Header: single full-bleed navy table containing logo, text, and address bar
-  const headerCellChildren: Paragraph[] = [];
-
-  // Logo
+  // LEFT cell: Logo (vertically centered)
+  const leftCellChildren: Paragraph[] = [];
   if (corepropLogoBuf) {
-    headerCellChildren.push(
+    leftCellChildren.push(
       new Paragraph({
-        spacing: { after: 0 },
+        spacing: { before: 0, after: 0 },
         children: [
           new ImageRun({
             data: corepropLogoBuf,
@@ -1130,9 +1130,9 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
       }),
     );
   } else {
-    headerCellChildren.push(
+    leftCellChildren.push(
       new Paragraph({
-        spacing: { after: 0 },
+        spacing: { before: 0, after: 0 },
         children: [
           new TextRun({ text: 'The ', font: FONT, size: 16, color: GOLD }),
           new TextRun({ text: 'CoreProp ', font: FONT, size: 20, bold: true, color: 'FFFFFF' }),
@@ -1142,27 +1142,25 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     );
   }
 
-  // Chartered Surveyors + Specialist Valuers (right-aligned using tab)
-  headerCellChildren.push(
+  // RIGHT cell: "Chartered Surveyors" + "Specialist Valuers" (right-aligned, vertically centered)
+  const rightCellChildren: Paragraph[] = [
     new Paragraph({
-      spacing: { after: 0 },
+      spacing: { before: 0, after: 0 },
+      alignment: AlignmentType.RIGHT,
       children: [
-        new TextRun({ text: '\t', font: FONT }),
         new TextRun({ text: 'Chartered Surveyors', font: FONT, size: FONT_SIZE, color: 'FFFFFF' }),
       ],
-      tabStops: [{ type: TabStopType.RIGHT, position: convertMillimetersToTwip(170) }],
     }),
     new Paragraph({
-      spacing: { after: 120 },
+      spacing: { before: 0, after: 0 },
+      alignment: AlignmentType.RIGHT,
       children: [
-        new TextRun({ text: '\t', font: FONT }),
-        new TextRun({ text: 'Specialist Valuers \u2013 Regulated by RICS', font: FONT, size: 16, color: 'C0C0C0' }),
+        new TextRun({ text: 'Specialist Valuers \u2013 Regulated by RICS', font: FONT, size: 14, color: 'C0C0C0' }),
       ],
-      tabStops: [{ type: TabStopType.RIGHT, position: convertMillimetersToTwip(170) }],
     }),
-  );
+  ];
 
-  // Navy banner table (logo + chartered surveyors only — NO address bar)
+  // Navy banner: two-column table — logo left, text right, SAME ROW
   const headerTable = new Table({
     width: { size: fullPageWidthTwip, type: WidthType.DXA },
     layout: TableLayoutType.FIXED,
@@ -1170,29 +1168,45 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     rows: [
       new TableRow({
         children: [
+          // LEFT: Logo
           new TableCell({
             shading: navyCellShading,
             borders: noBorders,
-            width: { size: fullPageWidthTwip, type: WidthType.DXA },
+            verticalAlign: VerticalAlign.CENTER,
+            width: { size: leftColWidth, type: WidthType.DXA },
             margins: {
-              top: convertMillimetersToTwip(3),
-              bottom: convertMillimetersToTwip(3),
+              top: convertMillimetersToTwip(2),
+              bottom: convertMillimetersToTwip(2),
               left: convertMillimetersToTwip(20),
-              right: convertMillimetersToTwip(10),
+              right: 0,
             },
-            children: headerCellChildren,
+            children: leftCellChildren,
+          }),
+          // RIGHT: Chartered Surveyors + Specialist Valuers
+          new TableCell({
+            shading: navyCellShading,
+            borders: noBorders,
+            verticalAlign: VerticalAlign.CENTER,
+            width: { size: rightColWidth, type: WidthType.DXA },
+            margins: {
+              top: convertMillimetersToTwip(2),
+              bottom: convertMillimetersToTwip(2),
+              left: 0,
+              right: convertMillimetersToTwip(20),
+            },
+            children: rightCellChildren,
           }),
         ],
       }),
     ],
   });
 
-  // Address bar OUTSIDE the navy table — sits on white background
+  // Address bar BELOW the navy table — white background, gold text, navy divider lines
   const addressBar = new Paragraph({
-    spacing: { before: 120, after: 0 },
+    spacing: { before: 80, after: 0 },
     border: {
-      top: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 4 },
-      bottom: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 4 },
+      top: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 3 },
+      bottom: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 3 },
     },
     children: [
       new TextRun({ text: propertyAddress, font: FONT, size: 20, color: GOLD }),
@@ -1286,10 +1300,10 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
           },
         },
         headers: {
-          default: new Header({ children: [new Paragraph({ children: [] })] }),
+          default: new Header({ children: [new Paragraph({ spacing: { before: 0, after: 0, line: 20 }, children: [] })] }),
         },
         footers: {
-          default: new Footer({ children: [new Paragraph({ children: [] })] }),
+          default: new Footer({ children: [new Paragraph({ spacing: { before: 0, after: 0, line: 20 }, children: [] })] }),
         },
         children: coverChildren as unknown as (Paragraph | Table)[],
       },
@@ -1318,10 +1332,10 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
           },
         },
         headers: {
-          default: new Header({ children: [new Paragraph({ children: [] })] }),
+          default: new Header({ children: [new Paragraph({ spacing: { before: 0, after: 0, line: 20 }, children: [] })] }),
         },
         footers: {
-          default: new Footer({ children: [new Paragraph({ children: [] })] }),
+          default: new Footer({ children: [new Paragraph({ spacing: { before: 0, after: 0, line: 20 }, children: [] })] }),
         },
         children: buildBackCoverPage() as unknown as (Paragraph | Table)[],
       },
