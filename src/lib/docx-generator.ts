@@ -1162,17 +1162,7 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     }),
   );
 
-  // Address bar with gold divider
-  headerCellChildren.push(
-    new Paragraph({
-      spacing: { before: 120, after: 0 },
-      border: { top: { style: BorderStyle.SINGLE, size: 2, color: GOLD, space: 4 } },
-      children: [
-        new TextRun({ text: propertyAddress, font: FONT, size: 20, color: GOLD }),
-      ],
-    }),
-  );
-
+  // Navy banner table (logo + chartered surveyors only — NO address bar)
   const headerTable = new Table({
     width: { size: fullPageWidthTwip, type: WidthType.DXA },
     layout: TableLayoutType.FIXED,
@@ -1197,7 +1187,19 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     ],
   });
 
-  const headerChildren: (Paragraph | Table)[] = [headerTable];
+  // Address bar OUTSIDE the navy table — sits on white background
+  const addressBar = new Paragraph({
+    spacing: { before: 120, after: 0 },
+    border: {
+      top: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 4 },
+      bottom: { style: BorderStyle.SINGLE, size: 2, color: NAVY, space: 4 },
+    },
+    children: [
+      new TextRun({ text: propertyAddress, font: FONT, size: 20, color: GOLD }),
+    ],
+  });
+
+  const headerChildren: (Paragraph | Table)[] = [headerTable, addressBar];
 
   // Footer: white background with divider line + contact info + RICS logo (matching gold standard)
   const footerLine1Children: (TextRun | ImageRun)[] = [
@@ -1257,7 +1259,7 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
     height: convertMillimetersToTwip(297),
   };
   const pageMargins = {
-    top: convertMillimetersToTwip(38),
+    top: convertMillimetersToTwip(44),
     bottom: convertMillimetersToTwip(28),
     left: convertMillimetersToTwip(25),
     right: convertMillimetersToTwip(25),
@@ -1275,13 +1277,19 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
       },
     },
     sections: [
-      // Section 1: Cover page — no header/footer, zero margins (table handles padding)
+      // Section 1: Cover page — EXPLICITLY empty header/footer, zero margins
       {
         properties: {
           page: {
             size: pageSize,
-            margin: { top: 0, bottom: 0, left: 0, right: 0 },
+            margin: { top: 0, bottom: 0, left: 0, right: 0, header: 0, footer: 0 },
           },
+        },
+        headers: {
+          default: new Header({ children: [new Paragraph({ children: [] })] }),
+        },
+        footers: {
+          default: new Footer({ children: [new Paragraph({ children: [] })] }),
         },
         children: coverChildren as unknown as (Paragraph | Table)[],
       },
@@ -1299,14 +1307,21 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
         },
         children: children as unknown as (Paragraph | Table)[],
       },
-      // Section 3: Back cover page — navy branded page, no header/footer
+      // Section 3: Back cover page — navy branded page, EXPLICITLY empty header/footer
+      // (Word inherits from previous section unless explicitly overridden)
       {
         properties: {
           type: SectionType.NEXT_PAGE,
           page: {
             size: pageSize,
-            margin: { top: 0, bottom: 0, left: 0, right: 0 },
+            margin: { top: 0, bottom: 0, left: 0, right: 0, header: 0, footer: 0 },
           },
+        },
+        headers: {
+          default: new Header({ children: [new Paragraph({ children: [] })] }),
+        },
+        footers: {
+          default: new Footer({ children: [new Paragraph({ children: [] })] }),
         },
         children: buildBackCoverPage() as unknown as (Paragraph | Table)[],
       },
