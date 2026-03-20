@@ -1101,6 +1101,7 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
   for (const p of appendixParas) {
     children.push(
       new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { after: 120 },
         children: [
           new TextRun({ text: p, font: FONT, size: FONT_SIZE }),
