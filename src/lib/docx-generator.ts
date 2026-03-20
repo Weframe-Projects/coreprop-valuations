@@ -149,21 +149,25 @@ function textToRuns(text: string): TextRun[] {
 
 function textToParagraphs(text: string, variables?: Record<string, string>): Paragraph[] {
   const filled = variables ? fillTemplate(text, variables) : text;
+  const bodyIndent = convertMillimetersToTwip(12); // Align body text with heading text
   return splitParagraphs(filled).map(
     (p) => {
       // Detect numbered paragraphs (e.g. "1.1." or "3.1.2.") and apply hanging indent
       const numberedMatch = p.match(/^(\d+\.\d+[\d.]*\.?\s)/);
       if (numberedMatch) {
         return new Paragraph({
+          alignment: AlignmentType.JUSTIFIED,
           spacing: { after: 160 },
-          indent: { left: convertMillimetersToTwip(12), hanging: convertMillimetersToTwip(12) },
-          keepLines: true,   // Keep paragraph together on one page
+          indent: { left: bodyIndent, hanging: bodyIndent },
+          keepLines: true,
           children: textToRuns(p),
         });
       }
       return new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { after: 160 },
-        keepLines: true,   // Keep paragraph together on one page
+        indent: { left: bodyIndent },
+        keepLines: true,
         children: textToRuns(p),
       });
     },
@@ -1292,7 +1296,7 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
       default: {
         document: {
           run: { font: FONT, size: FONT_SIZE },
-          paragraph: { spacing: { after: 160 } },
+          paragraph: { spacing: { after: 160 }, alignment: AlignmentType.JUSTIFIED },
         },
       },
     },
