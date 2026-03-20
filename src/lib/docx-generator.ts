@@ -565,8 +565,8 @@ function buildCoverPage(data: {
     }),
   );
 
-  // Spacer paragraphs to push contact footer to the bottom
-  for (let i = 0; i < 8; i++) {
+  // Spacer paragraphs to push contact footer to the very bottom of the page
+  for (let i = 0; i < 14; i++) {
     cellChildren.push(new Paragraph({ spacing: { after: 400 }, children: [] }));
   }
 
@@ -1103,10 +1103,10 @@ export async function generateDocx(data: GenerateDocxInput): Promise<Buffer> {
   // Header: Two-column navy table (logo LEFT, text RIGHT on SAME LINE)
   // then address bar below on white background
   const noBorders = {
-    top: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-    bottom: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-    left: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-    right: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+    top: { style: BorderStyle.NONE, size: 0, color: NAVY },
+    bottom: { style: BorderStyle.NONE, size: 0, color: NAVY },
+    left: { style: BorderStyle.NONE, size: 0, color: NAVY },
+    right: { style: BorderStyle.NONE, size: 0, color: NAVY },
   };
   const navyCellShading = { type: ShadingType.CLEAR, fill: NAVY };
   const marginTwip = convertMillimetersToTwip(25);
