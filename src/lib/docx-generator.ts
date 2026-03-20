@@ -152,15 +152,26 @@ function textToParagraphs(text: string, variables?: Record<string, string>): Par
   const bodyIndent = convertMillimetersToTwip(12); // Align body text with heading text
   return splitParagraphs(filled).map(
     (p) => {
-      // Detect numbered paragraphs (e.g. "1.1." or "3.1.2.") and apply hanging indent
+      // Detect numbered paragraphs (e.g. "3.1.6." or "17.2.") and use tab for alignment
       const numberedMatch = p.match(/^(\d+\.\d+[\d.]*\.?\s)/);
       if (numberedMatch) {
+        const numberPrefix = numberedMatch[1]; // e.g. "3.1.6. "
+        const restOfText = p.slice(numberPrefix.length);
+        // Deeper numbers (3+ levels like 3.1.6) need wider indent
+        const dotCount = (numberPrefix.match(/\./g) || []).length;
+        const hangingMm = dotCount >= 3 ? 18 : dotCount >= 2 ? 15 : 12;
+        const hangingTwip = convertMillimetersToTwip(hangingMm);
         return new Paragraph({
           alignment: AlignmentType.JUSTIFIED,
           spacing: { after: 160 },
-          indent: { left: bodyIndent, hanging: bodyIndent },
+          indent: { left: hangingTwip, hanging: hangingTwip },
           keepLines: true,
-          children: textToRuns(p),
+          tabStops: [{ type: TabStopType.LEFT, position: hangingTwip }],
+          children: [
+            new TextRun({ text: numberPrefix.trimEnd(), font: FONT, size: FONT_SIZE }),
+            new TextRun({ text: '\t', font: FONT }),
+            ...textToRuns(restOfText),
+          ],
         });
       }
       return new Paragraph({
